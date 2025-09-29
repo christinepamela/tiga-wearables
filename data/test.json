@@ -1,33 +1,149 @@
-#include <FS.h>
-#include <LittleFS.h>
-#include <ArduinoJson.h>
-
-void setup() {
-  Serial.begin(115200);
-  if (!LittleFS.begin()) {
-    Serial.println("LittleFS mount failed!");
-    return;
-  }
-
-  File file = LittleFS.open("/test.json", "r");
-  if (!file) {
-    Serial.println("Failed to open test.json");
-    return;
-  }
-
-  DynamicJsonDocument doc(8192);  // allocate enough space
-  DeserializationError error = deserializeJson(doc, file);
-  if (error) {
-    Serial.println("Failed to parse JSON");
-    return;
-  }
-
-  Serial.println("Loaded test categories:");
-  for (JsonObject category : doc["categories"].as<JsonArray>()) {
-    Serial.println(category["name"].as<const char*>());
-  }
-}
-
+{
+  "categories": [
+    {
+      "name": "Heart",
+      "tests": [
+        {
+          "name": "Heart Rate",
+          "instruction": "Place your thumb gently on the green light. Stay still.",
+          "duration": 60,
+          "sensor": "Pulse Sensor (green LED + photodiode)",
+          "resultFormat": "Heart rate: {value} BPM"
+        },
+        {
+          "name": "Heart Rate Variability",
+          "instruction": "Keep your thumb gently on the green light. Breathe normally.",
+          "duration": 60,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "HRV score: {value}"
+        },
+        {
+          "name": "Pulse Alert",
+          "instruction": "Background monitoring, no action needed.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Alert if outside safe range"
+        },
+        {
+          "name": "Exercise Zones",
+          "instruction": "During workout, system shows zone.",
+          "duration": 0,
+          "sensor": "Pulse Sensor + Activity",
+          "resultFormat": "Zone: {zone} ({bpm} BPM)"
+        },
+        {
+          "name": "Resting Heart Report",
+          "instruction": "Passive test while resting.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Resting heart rate: {value} BPM"
+        }
+      ]
+    },
+    {
+      "name": "Fitness",
+      "tests": [
+        {
+          "name": "Step Counter",
+          "instruction": "Counts automatically, no action needed.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Steps today: {steps}"
+        },
+        {
+          "name": "Activity Level",
+          "instruction": "Passive monitoring of activity.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Activity level: {level}"
+        },
+        {
+          "name": "Posture Monitor",
+          "instruction": "Sit upright. Device will buzz if you slouch.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Posture: {status}"
+        },
+        {
+          "name": "Workout Test",
+          "instruction": "Walk for 2 minutes with device. Keep moving.",
+          "duration": 120,
+          "sensor": "MPU6050 + Pulse Sensor",
+          "resultFormat": "Calories burned: {calories}, HR: {bpm} BPM"
+        },
+        {
+          "name": "High-Impact / Sudden Movement",
+          "instruction": "Device checks if your movement is safe.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Impact: {status}"
+        },
+        {
+          "name": "Walking Balance (Gait Check)",
+          "instruction": "Walk for 30 seconds. Device will check your steps.",
+          "duration": 30,
+          "sensor": "MPU6050",
+          "resultFormat": "Walking: {status}"
+        }
+      ]
+    },
+    {
+      "name": "Stability",
+      "tests": [
+        {
+          "name": "Fall Detection",
+          "instruction": "Background monitoring for falls.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Fall detected: {status}"
+        },
+        {
+          "name": "Balance Test",
+          "instruction": "Stand still for 10 seconds.",
+          "duration": 10,
+          "sensor": "MPU6050",
+          "resultFormat": "Balance: {status}"
+        },
+        {
+          "name": "Impact Alert",
+          "instruction": "Strong impact detected.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Impact alert: {status}"
+        },
+        {
+          "name": "Sleep Movement",
+          "instruction": "Passive overnight monitoring.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Toss/turn count: {value}"
+        }
+      ]
+    },
+    {
+      "name": "Dexterity",
+      "tests": [
+        {
+          "name": "Finger Mobility",
+          "instruction": "Tap the pad as fast as you can, 10 times.",
+          "duration": 0,
+          "sensor": "TTP223 Touch Sensor",
+          "resultFormat": "Tap speed: {ms} ms avg"
+        },
+        {
+          "name": "Hand Coordination",
+          "instruction": "When you feel vibration, tap the pad quickly.",
+          "duration": 0,
+          "sensor": "TTP223 + Vibration",
+          "resultFormat": "Reaction time: {ms}"
+        },
+        {
+          "name": "Grip Strength",
+          "instruction": "Press and hold the pad. Release when you can’t hold anymore.",
+          "duration": 0,
+          "sensor": "TTP223",
+          "resultFormat": "Grip duration: {seconds} s"
+        }
       ]
     }
   ]
