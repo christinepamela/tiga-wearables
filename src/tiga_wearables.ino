@@ -283,18 +283,64 @@ void drawTestMenu() {
   }
 }
 
-void runTest(JsonObject testObj) {
+void runTest(const char* testName) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_HEADER, TFT_BLACK);
-  tft.drawString("Running Test:", leftIndent, 50, 2);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(testObj["name"].as<const char*>(), leftIndent, 80, 2);
-  tft.drawString(testObj["instruction"].as<const char*>(), leftIndent, 110, 2);
+  tft.drawString("Test:", leftIndent, 20, 2);
 
-  // Placeholder: replace with actual sensor reading later
-  delay(2000);
-  tft.drawString("Result placeholder", leftIndent, 140, 2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(testName, leftIndent, 50, 2);
+
+  // Look up test in JSON
+  JsonObject testObj;
+  bool found = false;
+  for (JsonObject category : doc["categories"].as<JsonArray>()) {
+    for (JsonObject t : category["tests"].as<JsonArray>()) {
+      if (strcmp(t["name"], testName) == 0) {
+        testObj = t;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  if (!found) {
+    tft.drawString("Test not found in JSON!", leftIndent, 80, 2);
+    delay(2000);
+    return;
+  }
+
+  // Show instruction
+  tft.drawString(testObj["instruction"], leftIndent, 80, 2);
+
+  // Active test: handle duration
+  int duration = testObj["duration"] | 0;
+  if (duration > 0) {
+    int start = millis();
+    while (millis() - start < duration * 1000) {
+      int remaining = duration - (millis() - start) / 1000;
+      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+      tft.fillRect(leftIndent, 110, 100, 20, TFT_BLACK); // clear countdown
+      tft.drawString("Time left: " + String(remaining) + "s", leftIndent, 110, 2);
+      delay(200);
+    }
+  }
+
+  // Show sensor source
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.drawString("Sensor: " + String(testObj["sensor"].as<const char*>()), leftIndent, 140, 2);
+
+  // Placeholder result
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString("Result: " + String(testObj["resultFormat"].as<const char*>()), leftIndent, 170, 2);
+
+  // Wait for button press to continue
+  tft.drawString("Press SELECT to continue...", leftIndent, 200, 2);
+  while (digitalRead(btnSelect) == HIGH) delay(100); // wait for press
+  delay(200); // debounce
 }
+
 
 
 
