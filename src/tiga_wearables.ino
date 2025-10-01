@@ -192,24 +192,38 @@ void setup() {
   pinMode(btnScroll, INPUT_PULLUP);
   pinMode(btnSelect, INPUT_PULLUP);
 
-  // Parse embedded JSON
-  DeserializationError error = deserializeJson(doc, testJson);
-  if (error) {
-    Serial.print(F("JSON parse failed: "));
-    Serial.println(error.c_str());
-  } else {
-    Serial.println("Loaded test categories:");
-    for (JsonObject category : doc["categories"].as<JsonArray>()) {
-      Serial.println(category["name"].as<const char*>());
-    }
+// Parse embedded JSON
+DeserializationError error = deserializeJson(doc, testJson);
+if (error) {
+  // Show on screen
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_RED, TFT_BLACK);
+  tft.drawString("JSON parse failed!", leftIndent, 20, 2);
+
+  // Log in Serial for debugging
+  Serial.print(F("JSON parse failed: "));
+  Serial.println(error.c_str());
+
+  while (1) delay(10); // stop if JSON invalid
+} else {
+  Serial.println("Loaded test categories:");
+  for (JsonObject category : doc["categories"].as<JsonArray>()) {
+    Serial.println(category["name"].as<const char*>());
   }
+}
+
 
   drawCategoryBar();
 }
 
 void loop() {
+  // DEBUG auto-run once (optional)
+  if (millis() > 2000 && millis() < 5000) {
+    runTest("Heart Rate");   // run specific test by name
+  }
+
+  // Category navigation
   if (!inCategoryMenu) {
-    // Navigate categories left/right
     if (digitalRead(btnScroll) == LOW) {
       selectedCategory = (selectedCategory + 1) % doc["categories"].size();
       drawCategoryBar();
@@ -223,10 +237,10 @@ void loop() {
       delay(200);
     }
   } else {
-    // Navigate tests
+    // Test navigation
     JsonArray testsArray = doc["categories"][selectedCategory]["tests"].as<JsonArray>();
     int numTests = testsArray.size();
-    int testsOnPage = min(6, numTests - currentPage*6);
+    int testsOnPage = min(6, numTests - currentPage * 6);
 
     if (digitalRead(btnScroll) == LOW) {
       selectedTest++;
@@ -236,13 +250,15 @@ void loop() {
     }
 
     if (digitalRead(btnSelect) == LOW) {
-      JsonObject testObj = testsArray[selectedTest + currentPage*6];
-      runTest(testObj);
+      JsonObject testObj = testsArray[selectedTest + currentPage * 6];
+      const char* testName = testObj["name"];  // ✅ grab name
+      runTest(testName);                       // ✅ pass string
       drawTestMenu();
       delay(500);
     }
   }
 }
+
 
 void drawCategoryBar() {
   tft.fillRect(0, 100, 240, 35, TFT_BLACK);
@@ -283,62 +299,69 @@ void drawTestMenu() {
   }
 }
 
+// ---------------- Run Test with Countdown + Progress Bar ----------------
 void runTest(const char* testName) {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_HEADER, TFT_BLACK);
-  tft.drawString("Test:", leftIndent, 20, 2);
+  JsonArray categories = doc["categories"].as<JsonArray>();
 
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(testName, leftIndent, 50, 2);
+  for (JsonObject category : categories) {
+    JsonArray tests = category["tests"].as<JsonArray>();
+    for (JsonObject testObj : tests) {
+      if (testObj["name"] == testName) {
+        const char* instruction = testObj["instruction"];
+        int duration = testObj["duration"];
+        const char* resultFormat = testObj["resultFormat"];
 
-  // Look up test in JSON
-  JsonObject testObj;
-  bool found = false;
-  for (JsonObject category : doc["categories"].as<JsonArray>()) {
-    for (JsonObject t : category["tests"].as<JsonArray>()) {
-      if (strcmp(t["name"], testName) == 0) {
-        testObj = t;
-        found = true;
-        break;
+        // clear and show instruction
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.drawString(instruction, leftIndent, 20, 2);
+
+        if (duration > 0) {
+          unsigned long start = millis();
+          int barX = leftIndent;
+          int barY = 80;
+          int barW = tft.width() - 2 * leftIndent;
+          int barH = 12;
+
+          while (millis() - start < (unsigned long)duration * 1000) {
+            float frac = float(millis() - start) / (duration * 1000.0);
+            int filled = frac * barW;
+
+            // draw progress bar
+            tft.drawRect(barX, barY, barW, barH, TFT_WHITE);
+            tft.fillRect(barX, barY, filled, barH, TFT_GREEN);
+
+            int remaining = duration - (millis() - start) / 1000;
+            tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+            tft.fillRect(leftIndent, barY - 20, 120, 16, TFT_BLACK); // clear old
+            tft.drawString("Time left: " + String(remaining) + "s", leftIndent, barY - 20, 2);
+
+            delay(200);
+          }
+        }
+
+        // feedback (blink screen as placeholder)
+        tft.fillScreen(TFT_DARKGREEN);
+        delay(300);
+        tft.fillScreen(TFT_BLACK);
+
+        // show result
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        String result = String(resultFormat);
+        result.replace("{value}", "72"); // placeholder substitution
+        result.replace("{bpm}", "72");
+        result.replace("{status}", "OK");
+        result.replace("{steps}", "1200");
+        result.replace("{calories}", "18");
+        tft.drawString("Result:", leftIndent, 120, 2);
+        tft.drawString(result, leftIndent, 145, 2);
+
+        delay(3000); // show result for 3s
+        drawTestMenu(); // return to menu
+        return;
       }
     }
-    if (found) break;
   }
-
-  if (!found) {
-    tft.drawString("Test not found in JSON!", leftIndent, 80, 2);
-    delay(2000);
-    return;
-  }
-
-  // Show instruction
-  tft.drawString(testObj["instruction"], leftIndent, 80, 2);
-
-  // Active test: handle duration
-  int duration = testObj["duration"] | 0;
-  if (duration > 0) {
-    int start = millis();
-    while (millis() - start < duration * 1000) {
-      int remaining = duration - (millis() - start) / 1000;
-      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-      tft.fillRect(leftIndent, 110, 100, 20, TFT_BLACK); // clear countdown
-      tft.drawString("Time left: " + String(remaining) + "s", leftIndent, 110, 2);
-      delay(200);
-    }
-  }
-
-  // Show sensor source
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.drawString("Sensor: " + String(testObj["sensor"].as<const char*>()), leftIndent, 140, 2);
-
-  // Placeholder result
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("Result: " + String(testObj["resultFormat"].as<const char*>()), leftIndent, 170, 2);
-
-  // Wait for button press to continue
-  tft.drawString("Press SELECT to continue...", leftIndent, 200, 2);
-  while (digitalRead(btnSelect) == HIGH) delay(100); // wait for press
-  delay(200); // debounce
 }
 
 
