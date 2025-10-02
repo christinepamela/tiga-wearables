@@ -21,6 +21,10 @@ TFT_eSPI tft = TFT_eSPI();
 int footerSelection = 1;  // 0 = SOS, 1 = Run Test, 2 = Bitchat
 unsigned long lastPress = 0;
 
+bool inTestMenu = false;
+int testSelection = 0; // 0=Heart, 1=Fitness, 2=Stability, 3=Dexterity, 4=Back
+
+
 // Layout constants
 const int BAR_WIDTH = 20;     // Vertical health bar width
 const int HEADER_H = 24;      // Header height
@@ -41,15 +45,23 @@ void setup() {
 }
 
 void loop() {
-    if (digitalRead(BTN_SCROLL) == LOW && millis() - lastPress > 200) {
-    footerSelection = (footerSelection + 1) % 3; // cycle 0→1→2
-    drawFooter(footerSelection);
-
+  if (digitalRead(BTN_SCROLL) == LOW && millis() - lastPress > 200) {
+    if (inTestMenu) {
+      testSelection = (testSelection + 1) % 5; // cycle through 5 options
+      drawTestMenu();
+    } else {
+      footerSelection = (footerSelection + 1) % 3;
+      drawFooter(footerSelection);
+    }
     lastPress = millis();
   }
 
   if (digitalRead(BTN_ENTER) == LOW && millis() - lastPress > 300) {
-    handleSelection(footerSelection);
+    if (inTestMenu) {
+      handleTestSelection(testSelection);
+    } else {
+      handleSelection(footerSelection);
+    }
     lastPress = millis();
   }
 }
@@ -197,7 +209,8 @@ void handleSelection(int sel) {
     drawMainScreen();
 
   } else if (sel == 1) {
-    // Run Test screen
+    inTestMenu = true;
+    testSelection = 0;
     drawTestMenu();
 
   } else if (sel == 2) {
@@ -221,6 +234,35 @@ void handleSelection(int sel) {
     // Back from Test Menu
     drawMainScreen();
   }
+}
+
+// ============ Handle Selection Test Menu ============
+
+void handleTestSelection(int sel) {
+  if (sel == 0) {
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Heart Test...", tft.width()/2, tft.height()/2, 2);
+    delay(1500);
+  } else if (sel == 1) {
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Fitness Test...", tft.width()/2, tft.height()/2, 2);
+    delay(1500);
+  } else if (sel == 2) {
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Stability Test...", tft.width()/2, tft.height()/2, 2);
+    delay(1500);
+  } else if (sel == 3) {
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Dexterity Test...", tft.width()/2, tft.height()/2, 2);
+    delay(1500);
+  } else if (sel == 4) {
+    inTestMenu = false;
+    drawMainScreen();
+    return;
+  }
+
+  // After test, return to Test Menu
+  drawTestMenu();
 }
 
 // ============ Health Bar ============
@@ -254,32 +296,30 @@ void drawIcon(int x, int y, const uint16_t *icon) {
 void drawTestMenu() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
   int midX = tft.width() / 2;
   int midY = tft.height() / 2;
   int boxW = tft.width() / 2;
-  int boxH = (tft.height() - 40) / 2; // leave space for Back button
+  int boxH = (tft.height() - 40) / 2;
 
-  // Top-left box (Heart)
-  tft.drawRoundRect(0, 0, boxW, boxH, 4, TFT_WHITE);
-  tft.drawString("Heart", boxW/2, boxH/2, 2);
+  // Helper lambda for drawing
+  auto drawBox = [&](int idx, int x, int y, String label) {
+    uint16_t border = (testSelection == idx) ? TFT_CYAN : TFT_WHITE;
+    uint16_t fill   = (testSelection == idx) ? TFT_DARKGREY : TFT_BLACK;
 
-  // Top-right box (Fitness)
-  tft.drawRoundRect(boxW, 0, boxW, boxH, 4, TFT_WHITE);
-  tft.drawString("Fitness", boxW + boxW/2, boxH/2, 2);
+    tft.fillRoundRect(x, y, boxW, boxH, 4, fill);
+    tft.drawRoundRect(x, y, boxW, boxH, 4, border);
+    tft.setTextColor(TFT_WHITE, fill);
+    tft.drawString(label, x + boxW/2, y + boxH/2, 2);
+  };
 
-  // Bottom-left box (Stability)
-  tft.drawRoundRect(0, boxH, boxW, boxH, 4, TFT_WHITE);
-  tft.drawString("Stability", boxW/2, boxH + boxH/2, 2);
+  drawBox(0, 0, 0, "Heart");
+  drawBox(1, boxW, 0, "Fitness");
+  drawBox(2, 0, boxH, "Stability");
+  drawBox(3, boxW, boxH, "Dexterity");
 
-  // Bottom-right box (Dexterity)
-  tft.drawRoundRect(boxW, boxH, boxW, boxH, 4, TFT_WHITE);
-  tft.drawString("Dexterity", boxW + boxW/2, boxH + boxH/2, 2);
-
-  // Back button at bottom
-  int backY = tft.height() - 20;
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.drawString("[Back]", midX, backY, 2);
+  // Back button
+  uint16_t backColor = (testSelection == 4) ? TFT_RED : TFT_CYAN;
+  tft.setTextColor(backColor, TFT_BLACK);
+  tft.drawString("[Back]", midX, tft.height() - 20, 2);
 }
