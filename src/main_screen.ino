@@ -412,9 +412,9 @@ void handleSelection(int sel) {
 // ====== Handle Test Selection (JSON dynamic) ======
 
 void handleTestSelection(int sel) {
-  if (sel >= 0 && sel <= 3) { // Categories
+  if (sel >= 0 && sel <= 3) { // Categories 0–3
     drawSubFeatures(sel);
-  } else if (sel == 4) { // Back
+  } else if (sel == 4) { // Back from Test Menu
     inTestMenu = false;
     drawMainScreen();
   }
@@ -453,46 +453,146 @@ void drawTestMenu() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
 
-  JsonArray categories = doc["categories"].as<JsonArray>();
-  int boxW = tft.width()/2;
-  int boxH = (tft.height()-40)/2;
+  int midX = tft.width() / 2;
+  int midY = tft.height() / 2;
+  int boxW = tft.width() / 2;
+  int boxH = (tft.height() - 40) / 2;
 
-  for (int i = 0; i < 4; i++) {
-    int x = (i%2)*boxW;
-    int y = (i/2)*boxH;
-
-    uint16_t border = (testSelection == i) ? TFT_CYAN : TFT_WHITE;
-    uint16_t fill = (testSelection == i) ? TFT_DARKGREY : TFT_BLACK;
+  // Draw the 4 category boxes
+  auto drawBox = [&](int idx, int x, int y, String label) {
+    uint16_t border = (testSelection == idx) ? TFT_CYAN : TFT_WHITE;
+    uint16_t fill   = (testSelection == idx) ? TFT_DARKGREY : TFT_BLACK;
 
     tft.fillRoundRect(x, y, boxW, boxH, 4, fill);
     tft.drawRoundRect(x, y, boxW, boxH, 4, border);
     tft.setTextColor(TFT_WHITE, fill);
-    tft.drawString(categories[i]["name"].as<const char*>(), x+boxW/2, y+boxH/2, 2);
-  }
+    tft.drawString(label, x + boxW / 2, y + boxH / 2, 2);
+  };
+
+  drawBox(0, 0, 0, "Heart");
+  drawBox(1, boxW, 0, "Fitness");
+  drawBox(2, 0, boxH, "Stability");
+  drawBox(3, boxW, boxH, "Dexterity");
 
   // Back button
   uint16_t backColor = (testSelection == 4) ? TFT_RED : TFT_CYAN;
   tft.setTextColor(backColor, TFT_BLACK);
-  tft.drawString("[Back]", tft.width()/2, tft.height() - 20, 2);
+  tft.drawString("[Back]", midX, tft.height() - 20, 2);
 }
 
 // ====== Draw Sub-Features ======
-void drawSubFeatures(int categoryIndex) {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
-  JsonArray tests = doc["categories"][categoryIndex]["tests"].as<JsonArray>();
-  int rowY = 20;
-  for (int i = 0; i < tests.size(); i++) {
-    tft.drawString(String(i+1) + ". " + tests[i]["name"].as<const char*>(), 20, rowY, 2);
-    rowY += 20;
+int subSelection = 0;
+int scrollOffset = 0;
+bool inSubFeature = false;
+
+void drawSubFeatures(int categoryIndex) {
+  inSubFeature = true;
+  subSelection = 0;
+  scrollOffset = 0;
+
+  const int lineHeight = 20; // spacing for readability
+  const int visibleLines = (tft.height() - HEADER_H - FOOTER_H) / lineHeight - 1; // reserve space for back
+
+  int numSubTests = doc["categories"][categoryIndex]["tests"].size();
+
+  while (inSubFeature) {
+    tft.fillScreen(TFT_BLACK);
+
+    // Draw each visible sub-test
+    for (int i = 0; i < visibleLines && i + scrollOffset < numSubTests; i++) {
+      int idx = i + scrollOffset;
+      String testName = doc["categories"][categoryIndex]["tests"][idx]["name"].as<String>();
+
+      int y = HEADER_H + i * lineHeight + 10;
+      if (idx == subSelection) {
+        tft.fillRect(BAR_WIDTH, y - 2, tft.width() - BAR_WIDTH * 2, lineHeight, TFT_CYAN);
+        tft.setTextColor(TFT_BLACK, TFT_CYAN);
+      } else {
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+      }
+
+      tft.setTextDatum(TL_DATUM);
+      tft.setFreeFont(&FreeSans12pt7b);
+      tft.drawString(testName, BAR_WIDTH + 8, y);
+    }
+
+    // Draw "Back" option
+    int backY = HEADER_H + visibleLines * lineHeight + 10;
+    if (subSelection == numSubTests) {
+      tft.fillRect(BAR_WIDTH, backY - 2, tft.width() - BAR_WIDTH * 2, lineHeight, TFT_RED);
+      tft.setTextColor(TFT_WHITE, TFT_RED);
+    } else {
+      tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    }
+    tft.drawString("[Back]", BAR_WIDTH + 8, backY);
+
+    // Wait for button input
+    while (digitalRead(BTN_SCROLL) == HIGH && digitalRead(BTN_ENTER) == HIGH) {
+      delay(10);
+    }
+
+    // Scroll button pressed
+    if (digitalRead(BTN_SCROLL) == LOW) {
+      subSelection++;
+      if (subSelection > numSubTests) subSelection = 0;
+
+      // Adjust scrollOffset if selection moves out of visible window
+      if (subSelection - scrollOffset >= visibleLines) scrollOffset++;
+      if (subSelection < scrollOffset) scrollOffset--;
+
+      delay(200); // debounce
+    }
+
+    // Enter button pressed
+    if (digitalRead(BTN_ENTER) == LOW) {
+      if (subSelection == numSubTests) { // Back selected
+        inSubFeature = false;
+        drawTestMenu();
+      } else {
+        runSubTest(categoryIndex, subSelection);
+      }
+      delay(300); // debounce
+    }
   }
+}
+
+// Run the selected sub-test (placeholder for actual sensor logic)
+void runSubTest(int categoryIndex, int testIndex) {
+  tft.fillScreen(TFT_BLACK);
+
+  String testName = doc["categories"][categoryIndex]["tests"][testIndex]["name"].as<String>();
+  String instruction = doc["categories"][categoryIndex]["tests"][testIndex]["instruction"].as<String>();
+  int duration = doc["categories"][categoryIndex]["tests"][testIndex]["duration"];
+  String sensor = doc["categories"][categoryIndex]["tests"][testIndex]["sensor"].as<String>();
 
   tft.setTextDatum(MC_DATUM);
-  tft.drawString("[Press ENTER to go back]", tft.width()/2, tft.height() - 20, 2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setFreeFont(&FreeSans12pt7b);
+  tft.drawString(testName + "\n\n" + instruction, tft.width()/2, tft.height()/2);
 
-  while(digitalRead(BTN_ENTER) == HIGH) {} // wait press
-  delay(200);
-  drawTestMenu();
+  // ---- Sensor logic placeholder ----
+  // Example for pulse sensor:
+  if (sensor.indexOf("Pulse Sensor") >= 0) {
+    // call function readPulseSensor() or similar
+  } else if (sensor.indexOf("MPU6050") >= 0) {
+    // call accelerometer/motion reading
+  } else if (sensor.indexOf("TTP223") >= 0) {
+    // call touch sensor reading
+  }
+
+  // For now just wait for the duration or simulate result
+  if (duration > 0) {
+    delay(duration * 1000);
+  } else {
+    delay(2000);
+  }
+
+  // Optionally, show result placeholder (later replace with real data)
+  tft.fillScreen(TFT_BLACK);
+  tft.drawString("Test Complete!\nResult: TBD", tft.width()/2, tft.height()/2, 2);
+  delay(2000);
+
+  // Return to sub-feature menu
+  drawSubFeatures(categoryIndex);
 }
