@@ -1,5 +1,6 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
+#include <ArduinoJson.h>
 #include "heartIcon.h"
 #include "stepsIcon.h"
 #include "stabilityIcon.h"
@@ -31,6 +32,163 @@ const int HEADER_H = 24;      // Header height
 const int FOOTER_H = 24;      // Footer height
 const int ICON_SIZE = 24;     // Icon placeholder size
 
+// Embedded JSON string (your test.json content)
+const char* testJson = R"rawliteral(
+{
+  "categories": [
+    {
+      "name": "Heart",
+      "tests": [
+        {
+          "name": "Heart Rate",
+          "instruction": "Place your thumb gently on the green light. Stay still.",
+          "duration": 60,
+          "sensor": "Pulse Sensor (green LED + photodiode)",
+          "resultFormat": "Heart rate: {value} BPM"
+        },
+        {
+          "name": "Heart Rate Variability",
+          "instruction": "Keep your thumb gently on the green light. Breathe normally.",
+          "duration": 60,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "HRV score: {value}"
+        },
+        {
+          "name": "Pulse Alert",
+          "instruction": "Background monitoring, no action needed.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Alert if outside safe range"
+        },
+        {
+          "name": "Exercise Zones",
+          "instruction": "During workout, system shows zone.",
+          "duration": 0,
+          "sensor": "Pulse Sensor + Activity",
+          "resultFormat": "Zone: {zone} ({bpm} BPM)"
+        },
+        {
+          "name": "Resting Heart Report",
+          "instruction": "Passive test while resting.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Resting heart rate: {value} BPM"
+        }
+      ]
+    },
+    {
+      "name": "Fitness",
+      "tests": [
+        {
+          "name": "Step Counter",
+          "instruction": "Counts automatically, no action needed.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Steps today: {steps}"
+        },
+        {
+          "name": "Activity Level",
+          "instruction": "Passive monitoring of activity.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Activity level: {level}"
+        },
+        {
+          "name": "Posture Monitor",
+          "instruction": "Sit upright. Device will buzz if you slouch.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Posture: {status}"
+        },
+        {
+          "name": "Workout Test",
+          "instruction": "Walk for 2 minutes with device. Keep moving.",
+          "duration": 120,
+          "sensor": "MPU6050 + Pulse Sensor",
+          "resultFormat": "Calories burned: {calories}, HR: {bpm} BPM"
+        },
+        {
+          "name": "High-Impact / Sudden Movement",
+          "instruction": "Device checks if your movement is safe.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Impact: {status}"
+        },
+        {
+          "name": "Walking Balance (Gait Check)",
+          "instruction": "Walk for 30 seconds. Device will check your steps.",
+          "duration": 30,
+          "sensor": "MPU6050",
+          "resultFormat": "Walking: {status}"
+        }
+      ]
+    },
+    {
+      "name": "Stability",
+      "tests": [
+        {
+          "name": "Fall Detection",
+          "instruction": "Background monitoring for falls.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Fall detected: {status}"
+        },
+        {
+          "name": "Balance Test",
+          "instruction": "Stand still for 10 seconds.",
+          "duration": 10,
+          "sensor": "MPU6050",
+          "resultFormat": "Balance: {status}"
+        },
+        {
+          "name": "Impact Alert",
+          "instruction": "Strong impact detected.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Impact alert: {status}"
+        },
+        {
+          "name": "Sleep Movement",
+          "instruction": "Passive overnight monitoring.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Toss/turn count: {value}"
+        }
+      ]
+    },
+    {
+      "name": "Dexterity",
+      "tests": [
+        {
+          "name": "Finger Mobility",
+          "instruction": "Tap the pad as fast as you can, 10 times.",
+          "duration": 0,
+          "sensor": "TTP223 Touch Sensor",
+          "resultFormat": "Tap speed: {ms} ms avg"
+        },
+        {
+          "name": "Hand Coordination",
+          "instruction": "When you feel vibration, tap the pad quickly.",
+          "duration": 0,
+          "sensor": "TTP223 + Vibration",
+          "resultFormat": "Reaction time: {ms}"
+        },
+        {
+          "name": "Grip Strength",
+          "instruction": "Press and hold the pad. Release when you can’t hold anymore.",
+          "duration": 0,
+          "sensor": "TTP223",
+          "resultFormat": "Grip duration: {seconds} s"
+        }
+      ]
+    }
+  ]
+}
+)rawliteral";
+
+// Parsed JSON document
+DynamicJsonDocument doc(8192);
+
 void setup() {
   tft.init();
   tft.setRotation(1); // Landscape
@@ -38,12 +196,21 @@ void setup() {
   pinMode(BTN_SCROLL, INPUT_PULLUP);
   pinMode(BTN_ENTER, INPUT_PULLUP);
   
-  drawSplashScreen();  // Show splash screen
-  delay(4000);         // Display for 4 seconds
+  DeserializationError error = deserializeJson(doc, testJson);
+  if (error) {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("JSON Load Error!", tft.width()/2, tft.height()/2, 2);
+    while(1); // stop
+  }
 
+  drawSplashScreen();
+  delay(4000);
   drawMainScreen();
 }
 
+// ====== Loop ======
 void loop() {
   if (digitalRead(BTN_SCROLL) == LOW && millis() - lastPress > 200) {
     if (inTestMenu) {
@@ -65,6 +232,12 @@ void loop() {
     lastPress = millis();
   }
 }
+
+
+
+
+
+
 
 // ============ Splash Screen ============
 void drawSplashScreen() {
@@ -236,34 +409,17 @@ void handleSelection(int sel) {
   }
 }
 
-// ============ Handle Selection Test Menu ============
+// ====== Handle Test Selection (JSON dynamic) ======
 
 void handleTestSelection(int sel) {
-  if (sel == 0) {
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Heart Test...", tft.width()/2, tft.height()/2, 2);
-    delay(1500);
-  } else if (sel == 1) {
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Fitness Test...", tft.width()/2, tft.height()/2, 2);
-    delay(1500);
-  } else if (sel == 2) {
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Stability Test...", tft.width()/2, tft.height()/2, 2);
-    delay(1500);
-  } else if (sel == 3) {
-    tft.fillScreen(TFT_BLACK);
-    tft.drawString("Dexterity Test...", tft.width()/2, tft.height()/2, 2);
-    delay(1500);
-  } else if (sel == 4) {
+  if (sel >= 0 && sel <= 3) { // Categories
+    drawSubFeatures(sel);
+  } else if (sel == 4) { // Back
     inTestMenu = false;
     drawMainScreen();
-    return;
   }
-
-  // After test, return to Test Menu
-  drawTestMenu();
 }
+  
 
 // ============ Health Bar ============
 void drawHealthBar(int percent) {
@@ -292,34 +448,51 @@ void drawIcon(int x, int y, const uint16_t *icon) {
   tft.pushImage(x, y, ICON_SIZE, ICON_SIZE, icon);
 }
 
-// ====== Test Menu ======
+// ====== Draw Test Menu (JSON dynamic) ======
 void drawTestMenu() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
 
-  int midX = tft.width() / 2;
-  int midY = tft.height() / 2;
-  int boxW = tft.width() / 2;
-  int boxH = (tft.height() - 40) / 2;
+  JsonArray categories = doc["categories"].as<JsonArray>();
+  int boxW = tft.width()/2;
+  int boxH = (tft.height()-40)/2;
 
-  // Helper lambda for drawing
-  auto drawBox = [&](int idx, int x, int y, String label) {
-    uint16_t border = (testSelection == idx) ? TFT_CYAN : TFT_WHITE;
-    uint16_t fill   = (testSelection == idx) ? TFT_DARKGREY : TFT_BLACK;
+  for (int i = 0; i < 4; i++) {
+    int x = (i%2)*boxW;
+    int y = (i/2)*boxH;
+
+    uint16_t border = (testSelection == i) ? TFT_CYAN : TFT_WHITE;
+    uint16_t fill = (testSelection == i) ? TFT_DARKGREY : TFT_BLACK;
 
     tft.fillRoundRect(x, y, boxW, boxH, 4, fill);
     tft.drawRoundRect(x, y, boxW, boxH, 4, border);
     tft.setTextColor(TFT_WHITE, fill);
-    tft.drawString(label, x + boxW/2, y + boxH/2, 2);
-  };
-
-  drawBox(0, 0, 0, "Heart");
-  drawBox(1, boxW, 0, "Fitness");
-  drawBox(2, 0, boxH, "Stability");
-  drawBox(3, boxW, boxH, "Dexterity");
+    tft.drawString(categories[i]["name"].as<const char*>(), x+boxW/2, y+boxH/2, 2);
+  }
 
   // Back button
   uint16_t backColor = (testSelection == 4) ? TFT_RED : TFT_CYAN;
   tft.setTextColor(backColor, TFT_BLACK);
-  tft.drawString("[Back]", midX, tft.height() - 20, 2);
+  tft.drawString("[Back]", tft.width()/2, tft.height() - 20, 2);
+}
+
+// ====== Draw Sub-Features ======
+void drawSubFeatures(int categoryIndex) {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  JsonArray tests = doc["categories"][categoryIndex]["tests"].as<JsonArray>();
+  int rowY = 20;
+  for (int i = 0; i < tests.size(); i++) {
+    tft.drawString(String(i+1) + ". " + tests[i]["name"].as<const char*>(), 20, rowY, 2);
+    rowY += 20;
+  }
+
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("[Press ENTER to go back]", tft.width()/2, tft.height() - 20, 2);
+
+  while(digitalRead(BTN_ENTER) == HIGH) {} // wait press
+  delay(200);
+  drawTestMenu();
 }
