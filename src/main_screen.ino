@@ -43,39 +43,202 @@ const int ICON_SIZE = 24;     // Icon placeholder size
 const char* testJson = R"rawliteral(
 {
   "categories": [
-    { "name":"Heart", "tests":[
-        {"name":"Heart Rate","instruction":"Place your thumb gently on the green light. Stay still.","duration":60,"sensor":"Pulse Sensor (green LED + photodiode)","resultFormat":"Heart rate: {value} BPM"},
-        {"name":"Heart Rate Variability","instruction":"Keep your thumb gently on the green light. Breathe normally.","duration":60,"sensor":"Pulse Sensor","resultFormat":"HRV score: {value}"},
-        {"name":"Pulse Alert","instruction":"Background monitoring, no action needed.","duration":0,"sensor":"Pulse Sensor","resultFormat":"Alert if outside safe range"},
-        {"name":"Exercise Zones","instruction":"During workout, system shows zone.","duration":0,"sensor":"Pulse Sensor + Activity","resultFormat":"Zone: {zone} ({bpm} BPM)"},
-        {"name":"Resting Heart Report","instruction":"Passive test while resting.","duration":0,"sensor":"Pulse Sensor","resultFormat":"Resting heart rate: {value} BPM"}
+    {
+      "name": "Heart",
+      "tests": [
+        {
+          "name": "Heart Rate",
+          "instruction": "Place your thumb gently on the green light. Stay still.",
+          "postInstruction": "Remove your thumb from the device.",
+          "duration": 60,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Heart rate: {value} BPM",
+          "actions": ["Re-run", "Next", "Back"]
+        },
+        {
+          "name": "Heart Rate Variability",
+          "instruction": "Place your thumb gently on the green light. Breathe normally.",
+          "postInstruction": "Remove your thumb from the device.",
+          "duration": 60,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "HRV score: {value}",
+          "actions": ["Re-run", "Next", "Back"]
+        },
+        {
+          "name": "Pulse Alert",
+          "instruction": "Keep the device on your wrist. No action needed.",
+          "postInstruction": "Device will alert if your pulse is outside safe range.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Alert if outside safe range",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Exercise Zones",
+          "instruction": "Wear device during exercise. It will track your heart zone.",
+          "postInstruction": "Check your screen for zone results.",
+          "duration": 0,
+          "sensor": "Pulse Sensor + Activity",
+          "resultFormat": "Zone: {zone} ({bpm} BPM)",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Resting Heart Report",
+          "instruction": "Sit calmly for a few minutes with device on your wrist.",
+          "postInstruction": "Relax. Device is recording your resting heart rate.",
+          "duration": 0,
+          "sensor": "Pulse Sensor",
+          "resultFormat": "Resting heart rate: {value} BPM",
+          "actions": ["Back"]
+        }
       ]
     },
-    { "name":"Fitness","tests":[
-        {"name":"Step Counter","instruction":"Counts automatically, no action needed.","duration":0,"sensor":"MPU6050","resultFormat":"Steps today: {steps}"},
-        {"name":"Activity Level","instruction":"Passive monitoring of activity.","duration":0,"sensor":"MPU6050","resultFormat":"Activity level: {level}"},
-        {"name":"Posture Monitor","instruction":"Sit upright. Device will buzz if you slouch.","duration":0,"sensor":"MPU6050 + Vibration","resultFormat":"Posture: {status}"},
-        {"name":"Workout Test","instruction":"Walk for 2 minutes with device. Keep moving.","duration":120,"sensor":"MPU6050 + Pulse Sensor","resultFormat":"Calories burned: {calories}, HR: {bpm} BPM"},
-        {"name":"High-Impact / Sudden Movement","instruction":"Device checks if your movement is safe.","duration":0,"sensor":"MPU6050","resultFormat":"Impact: {status}"},
-        {"name":"Walking Balance (Gait Check)","instruction":"Walk for 30 seconds. Device will check your steps.","duration":30,"sensor":"MPU6050","resultFormat":"Walking: {status}"}
+    {
+      "name": "Fitness",
+      "tests": [
+        {
+          "name": "Step Counter",
+          "instruction": "Wear device. Steps are counted automatically.",
+          "postInstruction": "Check screen anytime for total steps.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Steps today: {steps}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Activity Level",
+          "instruction": "No action needed. Device tracks activity while worn.",
+          "postInstruction": "Your activity level is now shown.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Activity level: {level}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Posture Monitor",
+          "instruction": "Sit upright with device on wrist. Device will buzz if you slouch.",
+          "postInstruction": "Maintain upright sitting posture.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Posture: {status}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Workout Test",
+          "instruction": "Walk steadily for 2 minutes with device on wrist.",
+          "postInstruction": "Stop walking and wait for result.",
+          "duration": 120,
+          "sensor": "MPU6050 + Pulse Sensor",
+          "resultFormat": "Calories burned: {calories}, HR: {bpm} BPM",
+          "actions": ["Re-run", "Back"]
+        },
+        {
+          "name": "High-Impact / Sudden Movement",
+          "instruction": "No action needed. Device will check for unsafe movement.",
+          "postInstruction": "Result displayed if impact detected.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Impact: {status}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Walking Balance (Gait Check)",
+          "instruction": "Walk slowly for 30 seconds with device on wrist.",
+          "postInstruction": "Stop walking. Device will show your balance result.",
+          "duration": 30,
+          "sensor": "MPU6050",
+          "resultFormat": "Walking: {status}",
+          "actions": ["Re-run", "Back"]
+        }
       ]
     },
-    { "name":"Stability","tests":[
-        {"name":"Fall Detection","instruction":"Background monitoring for falls.","duration":0,"sensor":"MPU6050","resultFormat":"Fall detected: {status}"},
-        {"name":"Balance Test","instruction":"Stand still for 10 seconds.","duration":10,"sensor":"MPU6050","resultFormat":"Balance: {status}"},
-        {"name":"Impact Alert","instruction":"Strong impact detected.","duration":0,"sensor":"MPU6050 + Vibration","resultFormat":"Impact alert: {status}"},
-        {"name":"Sleep Movement","instruction":"Passive overnight monitoring.","duration":0,"sensor":"MPU6050","resultFormat":"Toss/turn count: {value}"}
+    {
+      "name": "Stability",
+      "tests": [
+        {
+          "name": "Fall Detection",
+          "instruction": "Wear device as normal. Device monitors for falls.",
+          "postInstruction": "Alert will show if a fall is detected.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Fall detected: {status}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Balance Test",
+          "instruction": "Stand still with feet apart for 10 seconds.",
+          "postInstruction": "Relax after test ends.",
+          "duration": 10,
+          "sensor": "MPU6050",
+          "resultFormat": "Balance: {status}",
+          "actions": ["Re-run", "Back"]
+        },
+        {
+          "name": "Impact Alert",
+          "instruction": "Wear device. It will alert on strong impact.",
+          "postInstruction": "Check screen for status after impact.",
+          "duration": 0,
+          "sensor": "MPU6050 + Vibration",
+          "resultFormat": "Impact alert: {status}",
+          "actions": ["Back"]
+        },
+        {
+          "name": "Sleep Movement",
+          "instruction": "Wear device overnight. No action needed.",
+          "postInstruction": "Check screen in the morning for result.",
+          "duration": 0,
+          "sensor": "MPU6050",
+          "resultFormat": "Toss/turn count: {value}",
+          "actions": ["Back"]
+        }
       ]
     },
-    { "name":"Dexterity","tests":[
-        {"name":"Finger Mobility","instruction":"Tap the pad as fast as you can, 10 times.","duration":0,"sensor":"TTP223 Touch Sensor","resultFormat":"Tap speed: {ms} ms avg"},
-        {"name":"Hand Coordination","instruction":"When you feel vibration, tap the pad quickly.","duration":0,"sensor":"TTP223 + Vibration","resultFormat":"Reaction time: {ms}"},
-        {"name":"Grip Strength","instruction":"Press and hold the pad. Release when you can’t hold anymore.","duration":0,"sensor":"TTP223","resultFormat":"Grip duration: {seconds} s"}
+    {
+      "name": "Dexterity",
+      "tests": [
+        {
+          "name": "Finger Mobility",
+          "instruction": "Tap the sensor pad quickly with one finger, 10 times.",
+          "postInstruction": "Stop tapping when finished.",
+          "duration": 0,
+          "sensor": "TTP223 Touch Sensor",
+          "resultFormat": "Tap speed: {ms} ms avg",
+          "actions": ["Re-run", "Back"]
+        },
+        {
+          "name": "Hand Coordination",
+          "instruction": "When you feel vibration, tap the pad quickly.",
+          "postInstruction": "Result will be shown after a few tries.",
+          "duration": 0,
+          "sensor": "TTP223 + Vibration",
+          "resultFormat": "Reaction time: {ms}",
+          "actions": ["Re-run", "Back"]
+        },
+        {
+          "name": "Grip Strength",
+          "instruction": "Press and hold the sensor pad. Release when tired.",
+          "postInstruction": "Release pad. Device will show grip duration.",
+          "duration": 0,
+          "sensor": "TTP223",
+          "resultFormat": "Grip duration: {seconds} s",
+          "actions": ["Re-run", "Back"]
+        }
       ]
     }
   ]
 }
+
 )rawliteral";
+
+struct TestResult {
+  String category;
+  String testName;
+  String result;
+  unsigned long timestamp;
+};
+
+TestResult results[20];
+int resultCount = 0;
 
 // Parsed JSON document
 DynamicJsonDocument doc(8192);
@@ -300,11 +463,11 @@ void drawSubFeatures(int categoryIndex) {
   currentCategory = categoryIndex;
 
   tft.fillScreen(TFT_BLACK);
-  tft.setTextFont(1);
+  tft.setTextFont(2);   // normal small clean font
   tft.setTextSize(1);
   tft.setTextDatum(TL_DATUM);
 
-  const int lineHeight = 16;
+  const int lineHeight = 24;
   const int marginTop = 20;
 
   int numTests = doc["categories"][categoryIndex]["tests"].size();
@@ -313,7 +476,9 @@ void drawSubFeatures(int categoryIndex) {
 
   // clamp scrollOffset
   if (scrollOffset < 0) scrollOffset = 0;
-  if (scrollOffset > max(0, totalOptions - visibleLines)) scrollOffset = max(0, totalOptions - visibleLines);
+  if (scrollOffset > max(0, totalOptions - visibleLines)) {
+    scrollOffset = max(0, totalOptions - visibleLines);
+  }
 
   int start = scrollOffset;
   int end = min(start + visibleLines, totalOptions);
@@ -323,7 +488,7 @@ void drawSubFeatures(int categoryIndex) {
     bool isSelected = (i == subSelection);
 
     if (isSelected) {
-      tft.fillRect(8, y - 1, tft.width() - 16, lineHeight, TFT_CYAN);
+      tft.fillRect(8, y - 2, tft.width() - 16, lineHeight, TFT_CYAN);
       tft.setTextColor(TFT_BLACK, TFT_CYAN);
     } else {
       tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -338,49 +503,141 @@ void drawSubFeatures(int categoryIndex) {
   }
 }
 
-// runSubTest - show instruction and simulate result (placeholder for real sensor code)
+
+// ====== Run Sub-Test with instruction popup ======
 void runSubTest(int categoryIndex, int testIndex) {
+  JsonObject t = doc["categories"][categoryIndex]["tests"][testIndex];
+  String testName = t["name"].as<String>();
+  String instruction = t["instruction"].as<String>();
+  int duration = t["duration"] | 60; // default to 60s
+  String resultFmt = t["resultFormat"].as<String>();
+
+  // === Step 1: Instruction Screen ===
   tft.fillScreen(TFT_BLACK);
-
-  String testName = doc["categories"][categoryIndex]["tests"][testIndex]["name"].as<String>();
-  String instruction = doc["categories"][categoryIndex]["tests"][testIndex]["instruction"].as<String>();
-  int duration = doc["categories"][categoryIndex]["tests"][testIndex]["duration"];
-  String sensor = doc["categories"][categoryIndex]["tests"][testIndex]["sensor"].as<String>();
-
-  tft.setTextFont(2);
-  tft.setTextSize(1);
-  tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
-  tft.drawString(testName, tft.width()/2, tft.height()/2 - 18);
-  tft.setTextFont(1);
-  tft.drawString(instruction, tft.width()/2, tft.height()/2 + 6);
+  // Title
+  tft.setTextFont(2);
+  tft.setTextDatum(TC_DATUM);
+  tft.drawString(testName, tft.width() / 2, 20);
 
-  // Placeholder sensor branch - insert real sensor calls here later
-  if (sensor.indexOf("Pulse Sensor") >= 0) {
-    // TODO: read pulse sensor
-  } else if (sensor.indexOf("MPU6050") >= 0) {
-    // TODO: read accelerometer
-  } else if (sensor.indexOf("TTP223") >= 0) {
-    // TODO: read touch sensor
+  // Instruction lines (centered middle)
+  tft.setTextFont(1);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Place your thumb gently", tft.width() / 2, tft.height() / 2 - 20);
+  tft.drawString("on the green light.", tft.width() / 2, tft.height() / 2);
+  tft.drawString("Breathe normally.", tft.width() / 2, tft.height() / 2 + 20);
+
+  // Start button
+  int btnW = 100, btnH = 30;
+  int btnX = (tft.width() - btnW) / 2;
+  int btnY = tft.height() - btnH - 40;
+  tft.fillRoundRect(btnX, btnY, btnW, btnH, 6, TFT_GREEN);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_BLACK, TFT_GREEN);
+  tft.drawString("Press Start", btnX + btnW / 2, btnY + btnH / 2);
+  
+  // Footer text (scrollable later)
+  tft.setTextFont(1);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.setTextDatum(BC_DATUM);
+  tft.drawString("← Back      Next →", tft.width() / 2, tft.height() - 8);
+  
+  // Wait for any previous press to release
+  while (digitalRead(BTN_ENTER) == LOW) delay(10);
+
+  // Now wait for a new press
+  while (digitalRead(BTN_ENTER) == HIGH) delay(10);
+  delay(200); // simple debounce
+
+  // === Step 2: Count-Up Timer ===
+  unsigned long start = millis();
+  int elapsed = 0;
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextFont(4);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(TC_DATUM);
+  tft.drawString("Measuring...", tft.width()/2, 20);
+
+  // Stop button
+  tft.setTextFont(1);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(BC_DATUM);
+  tft.drawString("[Stop & Exit]", tft.width() / 2, tft.height() - 8);
+
+  while (elapsed < duration) {
+    if (digitalRead(BTN_ENTER) == LOW) {
+      delay(300);
+      drawSubFeatures(categoryIndex);
+      return;
+    }
+
+    int seconds = (millis() - start) / 1000;
+    if (seconds != elapsed) {
+      elapsed = seconds;
+      tft.setTextDatum(MC_DATUM);
+      tft.setTextFont(7);
+      tft.setTextColor(TFT_GREEN, TFT_BLACK);
+      tft.fillRect(0, tft.height()/2 - 30, tft.width(), 60, TFT_BLACK);
+      tft.drawString(String(elapsed) + " s", tft.width()/2, tft.height()/2);
+    }
+
+    if (elapsed >= duration) break;
+    delay(100);
   }
 
-  // simulate duration (short for dev)
-  if (duration > 0) delay(min(5000, duration * 1000)); // cap in dev to avoid long hang
-  else delay(1500);
+  // === Step 3: Show Results ===
+  String result = "82"; // placeholder sensor result
+  String resultMsg = resultFmt;
+  resultMsg.replace("{value}", result);
 
-  // show dummy result
   tft.fillScreen(TFT_BLACK);
-  tft.setTextDatum(MC_DATUM);
+  tft.setTextDatum(TC_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextFont(2);
-  tft.drawString("Test Complete!", tft.width()/2, tft.height()/2 - 8);
-  tft.setTextFont(1);
-  tft.drawString("Result: 123 (dummy)", tft.width()/2, tft.height()/2 + 12);
-  delay(1400);
+  tft.drawString("Heart Rate Test Complete", tft.width()/2, 20);
 
-  // back to sub-feature list (keep selection on executed item)
-  drawSubFeatures(categoryIndex);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextFont(4);
+  tft.drawString(resultMsg, tft.width()/2, tft.height()/2);
+
+  // === Step 4: Options ===
+  const char* options[] = {"[Retest]", "[Average (3)]", "[Exit]"};
+  int optCount = 3;
+  int sel = 0;
+
+  tft.setTextFont(1); // small normal font
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+
+  String lastLine = "";
+  while (true) {
+  // Only redraw if something changes
+  String line = String(options[0]) + "   " + String(options[1]) + "   " + String(options[2]);
+  if (line != lastLine) {
+    tft.fillRect(0, tft.height() - 20, tft.width(), 20, TFT_BLACK);
+    tft.drawString(line, tft.width() / 2, tft.height() - 10);
+    lastLine = line;
+  }
+
+  // Button handling
+  if (digitalRead(BTN_SCROLL) == LOW && millis() - lastPress > 200) {
+    sel = (sel + 1) % optCount;
+    lastPress = millis();
+    lastLine = ""; // force refresh only on change
+  }
+
+  if (digitalRead(BTN_ENTER) == LOW && millis() - lastPress > 300) {
+    if (sel == 0) runSubTest(categoryIndex, testIndex);
+    else if (sel == 1) runSubTest(categoryIndex, testIndex);
+    else drawSubFeatures(categoryIndex);
+    return;
+  }
+  }
+  delay(50);
 }
+
 
 // ========== selection action (footer) ==========
 void handleSelection(int sel) {
