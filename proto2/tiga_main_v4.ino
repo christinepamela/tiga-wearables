@@ -61,7 +61,7 @@ struct GPSData {
 
 // ── WiFi for NTP time sync (optional — works without it) ─────
 // Leave blank if no WiFi — clock will show 00:00 until set
-const char* WIFI_SSID = "";      // e.g. "MyHomeWiFi"
+const char* WIFI_SSID = "Cronus";      // e.g. "MyHomeWiFi"
 const char* WIFI_PASS = "";      // e.g. "mypassword"
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 28800;   // GMT+8 (Malaysia/Singapore)
@@ -105,7 +105,7 @@ TFT_eSPI tft = TFT_eSPI();
 #define HR_WARN_LOW   45
 #define HR_WARN_HIGH 110
 #define STEPS_GOAL  3000
-#define FALL_G       2.5f
+#define FALL_G       3.0f   // Raised from 2.5 — reduces false triggers on table
 #define STABLE_G     1.3f
 
 // ── App states ───────────────────────────────────────────────
@@ -679,96 +679,108 @@ void exportSession() {
   tft.drawString("Open Serial Monitor at 115200", W/2, H/2 + 8);
   tft.drawString("then copy the report", W/2, H/2 + 24);
 
-  // Print full report to Serial
+  // ── TIGA WALK TEST REPORT ────────────────────────────────
   Serial.println();
-  Serial.println("╔══════════════════════════════════════════════════╗");
-  Serial.println("║          TIGA SESSION REPORT — MEDICAL DATA       ║");
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.printf ("║  Patient:        Self (test subject)              ║\n");
-  Serial.printf ("║  Device:         TIGA Proto 2 (breadboard)        ║\n");
-  Serial.printf ("║  Session date:   %02d/%02d/%04d                       ║\n",
-                  displayDay, displayMonth, displayYear);
-  Serial.printf ("║  Session time:   %02d:%02d                            ║\n",
+  Serial.println("=================================================");
+  Serial.println("  TIGA WALK TEST REPORT");
+  Serial.println("=================================================");
+  Serial.printf ("  Date:      %02d/%02d/%04d  %02d:%02d\n",
+                  displayDay, displayMonth, displayYear,
                   displayHour, displayMin);
-  Serial.printf ("║  Duration:       %d min %d sec                     ║\n",
-                  durMin, durSec);
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  CARDIOVASCULAR                                    ║");
+  Serial.printf ("  Duration:  %d min %d sec\n", durMin, durSec);
+  Serial.printf ("  Subject:   Test subject (self)\n");
+  Serial.println("-------------------------------------------------");
+
+  // ── WHAT TO ANALYSE: HEART ──
+  Serial.println("  [1] HEART RATE");
   if (daily.hrSamples > 0) {
-    Serial.printf("║  HR Average:     %.0f bpm (n=%d samples)           ║\n",
-                  daily.avgHR, daily.hrSamples);
-    Serial.printf("║  HR Peak:        %.0f bpm                          ║\n",
-                  sessionPeakHR);
-    Serial.printf("║  HR Low:         %.0f bpm                          ║\n",
-                  sessionLowHR > 900 ? 0 : sessionLowHR);
+    Serial.printf ("  Average:   %.0f bpm\n", daily.avgHR);
+    Serial.printf ("  Peak:      %.0f bpm\n", sessionPeakHR);
+    Serial.printf ("  Low:       %.0f bpm\n", sessionLowHR > 900 ? 0 : sessionLowHR);
+    Serial.printf ("  Samples:   %d readings\n", daily.hrSamples);
+    Serial.println("  >> Check: avg should be 60-100 for resting/light walk");
+    Serial.println("  >> Check: peak shows exertion level during walk");
+    if (daily.avgHR > 0 && daily.avgHR < 60)
+      Serial.println("  >> FLAG: Average below 60 — bradycardia range");
+    if (sessionPeakHR > 110)
+      Serial.println("  >> FLAG: Peak above 110 — monitor closely");
   } else {
-    Serial.println("║  HR:             No reading recorded               ║");
-    Serial.println("║  Note:           Pulse sensor requires finger      ║");
-    Serial.println("║                  contact. Stop & hold 15s to read. ║");
+    Serial.println("  No HR readings — finger was not on sensor.");
+    Serial.println("  >> ACTION: Stop 2-3x next walk, hold finger 15s each.");
   }
-  Serial.printf ("║  HR Zone:        Zone %d (%s)              ║\n",
-                  data.hrZone, hrZoneLabel());
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  ACTIVITY                                          ║");
-  Serial.printf ("║  Steps:          %d steps                          ║\n",
-                  sessionSteps);
-  Serial.printf ("║  Step goal:      %d steps (%d%% achieved)           ║\n",
-                  STEPS_GOAL,
-                  (int)min((float)sessionSteps/STEPS_GOAL*100, 100.0f));
-  Serial.printf ("║  Active time:    %d minutes                        ║\n",
-                  daily.activityMins);
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  STABILITY & SAFETY                                ║");
-  Serial.printf ("║  Fall events:    %d detected                       ║\n",
-                  daily.fallCount);
-  Serial.printf ("║  Balance score:  %d / 100                          ║\n",
-                  data.balanceScore);
-  Serial.printf ("║  Accel (current):%.2f G                            ║\n",
-                  data.accelG);
-  Serial.printf ("║  Tilt angle:     %.1f degrees                      ║\n",
-                  data.tiltAngle);
-  Serial.printf ("║  SOS triggered:  %d times                          ║\n",
-                  daily.sosCount);
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  ENVIRONMENT                                       ║");
-  Serial.printf ("║  Temp (device):  %.1f C (chip die, not body)       ║\n",
-                  data.tempC);
-  Serial.printf ("║  Battery:        %.0f%%                             ║\n",
-                  data.battery);
-  Serial.printf ("║  Device worn:    %s                            ║\n",
-                  data.wearing ? "Yes (skin contact detected)" : "No");
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  GPS & LOCATION                                    ║");
-  if (gpsData.hasFix) {
-    Serial.printf ("║  Last fix:       %.6f, %.6f          ║\n",
-                    gpsData.lat, gpsData.lng);
-    Serial.printf ("║  GPS distance:   %.0f m (%.2f km)               ║\n",
-                    gpsData.distanceM, gpsData.distanceM/1000.0f);
-    Serial.printf ("║  Satellites:     %d                              ║\n",
-                    gpsData.satellites);
-    Serial.printf ("║  Maps link:      https://maps.google.com/?q=%.6f,%.6f\n",
-                    gpsData.lat, gpsData.lng);
-    Serial.println("║                  (last known position)            ║");
-  } else {
-    Serial.println("║  GPS fix:        Not obtained (indoors?)          ║");
-    Serial.printf ("║  Satellites:     %d found                        ║\n",
-                    gpsData.satellites);
-    Serial.println("║  Note:           GPS needs clear sky view.        ║");
-    Serial.println("║                  Go outside for location data.    ║");
-  }
-  Serial.println("║  Run from menu > Dexterity during session          ║");
-  Serial.println("╠══════════════════════════════════════════════════╣");
-  Serial.println("║  NOTES FOR DOCTOR                                  ║");
-  Serial.println("║  - Device: TIGA prototype (breadboard, not medical ║");
-  Serial.println("║    grade). Data is indicative, not clinical.       ║");
-  Serial.println("║  - Pulse sensor: analog PPG (pulsesensor.com)      ║");
-  Serial.println("║    Requires stationary finger contact. Motion       ║");
-  Serial.println("║    artifacts affect reading during walking.         ║");
-  Serial.println("║  - Accelerometer: MPU6050 6-axis IMU               ║");
-  Serial.println("║  - Fall detection threshold: 2.5G                  ║");
-  Serial.println("╚══════════════════════════════════════════════════╝");
   Serial.println();
-  Serial.println("  Copy the above and paste into WhatsApp / email.");
+
+  // ── WHAT TO ANALYSE: ACTIVITY ──
+  Serial.println("  [2] ACTIVITY");
+  Serial.printf ("  Steps:     %d of %d goal (%d%%)\n",
+                  sessionSteps, STEPS_GOAL,
+                  (int)min((float)sessionSteps/STEPS_GOAL*100,100.0f));
+  Serial.printf ("  Active:    %d minutes\n", daily.activityMins);
+  if (gpsData.distanceM > 0) {
+    Serial.printf ("  Distance:  %.0f m (%.2f km) — GPS measured\n",
+                    gpsData.distanceM, gpsData.distanceM/1000.0f);
+    // Estimate stride length from steps vs GPS distance
+    if (sessionSteps > 0) {
+      float strideM = gpsData.distanceM / sessionSteps;
+      Serial.printf ("  Stride:    ~%.2f m per step\n", strideM);
+      Serial.println("  >> Check: typical stride 0.6-0.8m. Shorter = cautious gait.");
+    }
+  } else {
+    Serial.println("  Distance:  No GPS fix (indoors / no sky view)");
+  }
+  Serial.println("  >> Check: did step count increase steadily during walk?");
+  Serial.println("  >> Check: any long pauses? (could indicate fatigue/rest)");
+  Serial.println();
+
+  // ── WHAT TO ANALYSE: STABILITY ──
+  Serial.println("  [3] STABILITY & FALL RISK");
+  Serial.printf ("  Falls detected:  %d\n", daily.fallCount);
+  Serial.printf ("  Balance score:   %d / 100\n", data.balanceScore);
+  Serial.printf ("  Tilt angle:      %.1f degrees\n", data.tiltAngle);
+  Serial.printf ("  Accel peak:      %.2f G\n", data.accelG);
+  Serial.println("  >> Check: 0 falls = good. Any fall = review threshold.");
+  Serial.println("  >> Check: balance score >70 = stable gait.");
+  Serial.println("  >> Check: tilt >25 degrees = posture concern.");
+  if (daily.fallCount > 0)
+    Serial.println("  >> FLAG: Falls detected — check if real or false trigger.");
+  Serial.println();
+
+  // ── WHAT TO ANALYSE: GPS ──
+  Serial.println("  [4] GPS & LOCATION");
+  if (gpsData.hasFix) {
+    Serial.printf ("  Last position: %.6f, %.6f\n",
+                    gpsData.lat, gpsData.lng);
+    Serial.printf ("  Satellites:    %d\n", gpsData.satellites);
+    Serial.printf ("  Maps:          https://maps.google.com/?q=%.6f,%.6f\n",
+                    gpsData.lat, gpsData.lng);
+    Serial.println("  >> Paste Maps link into browser to see last location.");
+    Serial.println("  >> On fall alert this link would go to family via Telegram.");
+  } else {
+    Serial.printf ("  No GPS fix. Satellites seen: %d\n", gpsData.satellites);
+    Serial.println("  >> Go outside with clear sky view for GPS to lock.");
+  }
+  Serial.println();
+
+  // ── WHAT TO ANALYSE: DEVICE HEALTH ──
+  Serial.println("  [5] DEVICE HEALTH");
+  Serial.printf ("  Battery:   %.0f%%\n", data.battery);
+  Serial.printf ("  Worn:      %s\n", data.wearing ? "Yes" : "No — not in skin contact");
+  Serial.printf ("  Temp:      %.1f C (chip die temp, not body)\n", data.tempC);
+  Serial.println("  >> Battery should be >50% for a full walk test.");
+  Serial.println("  >> Worn = No means sensor was not against skin.");
+  Serial.println();
+
+  // ── SENSOR CALIBRATION NOTES ──
+  Serial.println("  [6] CALIBRATION NOTES FOR NEXT WALK");
+  Serial.println("  Pulse sensor: stationary readings only.");
+  Serial.println("  Stop, press finger firmly, wait 10s for stable reading.");
+  Serial.println("  Step counter: accelerometer-based, ~5-10% error vs GPS.");
+  Serial.println("  Fall threshold: 3.0G (raised from 2.5G to reduce false alarms).");
+  Serial.println("  GPS jitter filter: 5m minimum movement to count distance.");
+  Serial.println();
+  Serial.println("=================================================");
+  Serial.println("  END OF REPORT — copy and paste to share");
+  Serial.println("=================================================");
   Serial.println();
 
   delay(3000);
@@ -1737,6 +1749,10 @@ void drawEmergency() {
       tft.drawString("Help is on the way.", W/2, 116);
     }
   }
+
+  tft.setTextSize(1); tft.setTextColor(C_TEXT);
+  tft.drawString("BTN2: I'm OK — dismiss", W/2, H-12);
+}
 
   tft.setTextSize(1); tft.setTextColor(C_TEXT);
   tft.drawString("BTN2: I'm OK — dismiss", W/2, H-12);
