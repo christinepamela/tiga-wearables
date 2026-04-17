@@ -61,7 +61,7 @@ struct GPSData {
 
 // ── WiFi for NTP time sync (optional — works without it) ─────
 // Leave blank if no WiFi — clock will show 00:00 until set
-const char* WIFI_SSID = "Cronus";      // e.g. "MyHomeWiFi"
+const char* WIFI_SSID = "";      // e.g. "MyHomeWiFi"
 const char* WIFI_PASS = "";      // e.g. "mypassword"
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 28800;   // GMT+8 (Malaysia/Singapore)
@@ -797,6 +797,13 @@ void goToSleep() {
   tft.drawString("sleeping...", W/2, H/2 - 10);
   tft.drawString("press any button to wake", W/2, H/2 + 8);
   delay(1200);
+
+  // Wait for BTN1 to be released before sleeping
+  // Otherwise the held button immediately wakes the device
+  while (digitalRead(BUTTON1_PIN) == LOW) {
+    delay(10);
+  }
+  delay(200); // small debounce after release
 
   // Backlight off
   digitalWrite(TFT_BL, LOW);
@@ -1749,10 +1756,6 @@ void drawEmergency() {
       tft.drawString("Help is on the way.", W/2, 116);
     }
   }
-
-  tft.setTextSize(1); tft.setTextColor(C_TEXT);
-  tft.drawString("BTN2: I'm OK — dismiss", W/2, H-12);
-}
 
   tft.setTextSize(1); tft.setTextColor(C_TEXT);
   tft.drawString("BTN2: I'm OK — dismiss", W/2, H-12);
