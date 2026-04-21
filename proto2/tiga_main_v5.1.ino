@@ -71,8 +71,8 @@ struct GPSData {
 
 // ── WiFi for NTP time sync (optional — works without it) ─────
 // Leave blank if no WiFi — clock will show 00:00 until set
-const char* WIFI_SSID = "Cronus";      // e.g. "MyHomeWiFi"
-const char* WIFI_PASS = "Garfield77";      // e.g. "mypassword"
+const char* WIFI_SSID = "";      // e.g. "MyHomeWiFi"
+const char* WIFI_PASS = "";      // e.g. "mypassword"
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 28800;   // GMT+8 (Malaysia/Singapore)
 const int   DAYLIGHT_OFFSET = 0;
