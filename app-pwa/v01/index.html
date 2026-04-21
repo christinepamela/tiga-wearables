@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TIGA — Health Companion</title>
+<link rel="manifest" href="manifest.json">
+
+<!--
+===============================================================
+  TIGA Companion App — v0.1 (mock-data scaffolding)
+===============================================================
+  Single-file PWA. Open index.html in any modern browser.
+
+  Modes:
+    - Demo mode: generates realistic fake data, no hardware needed
+    - Live mode: connects to TIGA wearable via Web Bluetooth
+
+  Roles:
+    - User: primary wearer view (dashboard, history, alerts)
+    - Caregiver: family view (connected devices, alert queue)
+
+  BLE support:
+    - Android Chrome: works natively
+    - iOS Safari: use "Bluefy" browser from App Store
+    - Desktop Chrome/Edge: works (useful for dev)
+===============================================================
+-->
+
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root {
+  --bg:           #0a0a0a;
+  --surface:      #161616;
+  --surface-2:    #1f1f1f;
+  --border:       #2a2a2a;
+  --text:         #f5f5f5;
+  --text-muted:   #888;
+  --text-dim:     #555;
+  --accent:       #4ade80;   /* green — healthy */
+  --accent-dim:   #166534;
+  --warn:         #fb923c;   /* orange — watch */
+  --danger:       #ef4444;   /* red — emergency */
+  --info:         #60a5fa;   /* blue — info */
+
+  --radius:       14px;
+  --radius-sm:    8px;
+  --shadow:       0 2px 8px rgba(0,0,0,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+               "Segoe UI", Roboto, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ============================================================
+   LAYOUT — App shell with bottom nav
+   ============================================================ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;   /* dynamic viewport for mobile browsers */
+}
+
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px 90px;
+  display: none;
+}
+.screen.active { display: block; }
+
+.screen-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+.screen-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+/* ============================================================
+   BOTTOM NAV
+   ============================================================ */
+nav.bottom {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(22, 22, 22, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+  z-index: 100;
+}
+nav.bottom button {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+nav.bottom button .icon {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+nav.bottom button.active { color: var(--accent); }
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+}
+.card-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.card-value {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.card-unit {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.card-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* Hero card — bigger, for primary metric */
+.hero {
+  padding: 24px 20px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.hero .card-value { font-size: 52px; }
+
+/* Grid for smaller metric cards */
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.metric-grid .card { margin-bottom: 0; }
+
+/* Status chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-2);
+}
+.chip .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.chip.ok .dot { background: var(--accent); }
+.chip.warn .dot { background: var(--warn); }
+.chip.danger .dot { background: var(--danger); }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn.danger    { background: var(--danger); color: #fff; }
+.btn + .btn { margin-top: 10px; }
+
+/* ============================================================
+   LIST ITEMS
+   ============================================================ */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.list-item:active { background: var(--surface-2); }
+.list-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.list-item-title { font-size: 15px; font-weight: 500; }
+.list-item-sub   { font-size: 13px; color: var(--text-muted); }
+.list-item-right { color: var(--text-dim); font-size: 20px; }
+
+/* ============================================================
+   LOGIN SCREEN
+   ============================================================ */
+#login {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100dvh;
+  padding: 40px 24px;
+  text-align: center;
+}
+#login .logo {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--info) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+#login .tagline {
+  color: var(--text-muted);
+  margin-bottom: 48px;
+  font-size: 15px;
+}
+#login .role-choice {
+  width: 100%;
+  max-width: 320px;
+}
+#login .role-choice h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+.role-btn {
+  width: 100%;
+  padding: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.role-btn:active { transform: scale(0.98); }
+.role-btn:hover  { border-color: var(--accent); }
+.role-btn .title { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+.role-btn .desc  { font-size: 13px; color: var(--text-muted); }
+
+/* ============================================================
+   TOP BAR (inside app, above content)
+   ============================================================ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.topbar .user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar .avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+.topbar .user-info .name { font-weight: 600; font-size: 15px; }
+.topbar .user-info .mode { font-size: 11px; color: var(--text-muted); }
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+#toast {
+  position: fixed;
+  bottom: 100px;
+  left: 16px; right: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  z-index: 200;
+  transform: translateY(200%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#toast.show { transform: translateY(0); }
+
+/* ============================================================
+   HISTORY LIST
+   ============================================================ */
+.history-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 4px 8px;
+}
+.history-date:first-child { margin-top: 0; }
+
+/* ============================================================
+   LIVE HR INDICATOR (heartbeat animation)
+   ============================================================ */
+.hr-pulse {
+  display: inline-block;
+  animation: heartbeat 1s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ============================================================
+     LOGIN SCREEN
+     ============================================================ -->
+<div id="login">
+  <div class="logo">tiga</div>
+  <div class="tagline">Health companion for the people you love</div>
+  <div class="role-choice">
+    <h3>I am a…</h3>
+    <button class="role-btn" onclick="setRole('user')">
+      <div class="title">Wearer</div>
+      <div class="desc">I wear a TIGA device and track my health</div>
+    </button>
+    <button class="role-btn" onclick="setRole('caregiver')">
+      <div class="title">Caregiver</div>
+      <div class="desc">I look after someone who wears a TIGA device</div>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP
+     ============================================================ -->
+<div id="app" style="display: none;">
+
+  <!-- HOME / DASHBOARD SCREEN -->
+  <section class="screen active" id="screen-home">
+    <div class="topbar">
+      <div class="user">
+        <div class="avatar" id="avatar">A</div>
+        <div class="user-info">
+          <div class="name" id="user-name">Loading…</div>
+          <div class="mode" id="user-mode">Demo mode</div>
+        </div>
+      </div>
+      <span class="chip ok" id="connection-chip">
+        <span class="dot"></span>
+        <span id="connection-text">Connected</span>
+      </span>
+    </div>
+
+    <div class="screen-title" id="home-greeting">Good morning</div>
+    <div class="screen-subtitle" id="home-subtitle">Here's how you're doing today</div>
+
+    <!-- Hero card: heart rate -->
+    <div class="card hero">
+      <div class="card-label">Heart rate</div>
+      <div class="card-value">
+        <span id="hr-value">72</span><span class="hr-pulse">♥</span>
+        <span class="card-unit">bpm</span>
+      </div>
+      <div class="card-detail" id="hr-status">Steady and healthy</div>
+    </div>
+
+    <!-- Metric grid -->
+    <div class="metric-grid">
+      <div class="card">
+        <div class="card-label">Steps</div>
+        <div class="card-value" id="steps-value">2,847</div>
+        <div class="card-detail">of 3,000 goal</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Battery</div>
+        <div class="card-value" id="battery-value">84<span class="card-unit">%</span></div>
+        <div class="card-detail" id="battery-detail">~18h remaining</div>
+      </div>
+      <div class="card">
+        <div class="card-label">SpO₂</div>
+        <div class="card-value" id="spo2-value">97<span class="card-unit">%</span></div>
+        <div class="card-detail">Healthy range</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Active time</div>
+        <div class="card-value" id="active-value">42<span class="card-unit">min</span></div>
+        <div class="card-detail">Today so far</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Safety</div>
+      <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+        <span class="chip ok"><span class="dot"></span>No falls today</span>
+        <span class="chip ok"><span class="dot"></span>Stable gait</span>
+        <span class="chip ok"><span class="dot"></span>Worn correctly</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY SCREEN -->
+  <section class="screen" id="screen-history">
+    <div class="screen-title">History</div>
+    <div class="screen-subtitle">Past walks and sessions</div>
+    <div id="history-list">
+      <!-- populated by JS -->
+    </div>
+  </section>
+
+  <!-- ALERTS SCREEN (caregiver) / EMERGENCY (user) -->
+  <section class="screen" id="screen-alerts">
+    <div class="screen-title" id="alerts-title">Emergency</div>
+    <div class="screen-subtitle" id="alerts-subtitle">Your emergency contacts</div>
+
+    <div id="contacts-list">
+      <!-- populated by JS -->
+    </div>
+
+    <button class="btn danger" style="margin-top: 20px;" onclick="triggerSOS()">
+      Send SOS alert
+    </button>
+    <button class="btn secondary" onclick="addContact()">
+      + Add emergency contact
+    </button>
+  </section>
+
+  <!-- SETTINGS SCREEN -->
+  <section class="screen" id="screen-settings">
+    <div class="screen-title">Settings</div>
+    <div class="screen-subtitle">Configure your TIGA experience</div>
+
+    <div class="card">
+      <div class="card-label">Data source</div>
+      <div class="list-item" onclick="toggleMode()">
+        <div class="list-item-main">
+          <div class="list-item-title">Mode</div>
+          <div class="list-item-sub" id="mode-detail">Using simulated demo data</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Device</div>
+      <div class="list-item" onclick="scanForDevice()">
+        <div class="list-item-main">
+          <div class="list-item-title">Connect TIGA wearable</div>
+          <div class="list-item-sub" id="device-status">No device paired</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Account</div>
+      <div class="list-item" onclick="switchRole()">
+        <div class="list-item-main">
+          <div class="list-item-title">Switch role</div>
+          <div class="list-item-sub" id="current-role">Currently: Wearer</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+      <div class="list-item" onclick="logout()">
+        <div class="list-item-main">
+          <div class="list-item-title">Sign out</div>
+          <div class="list-item-sub">Return to login screen</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">About</div>
+      <div class="list-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Version</div>
+          <div class="list-item-sub">TIGA App v0.1 (mock data)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom">
+    <button class="active" data-screen="home" onclick="showScreen('home')">
+      <span class="icon">●</span>Home
+    </button>
+    <button data-screen="history" onclick="showScreen('history')">
+      <span class="icon">≡</span>History
+    </button>
+    <button data-screen="alerts" onclick="showScreen('alerts')">
+      <span class="icon">!</span><span id="nav-alerts-label">Emergency</span>
+    </button>
+    <button data-screen="settings" onclick="showScreen('settings')">
+      <span class="icon">⚙</span>Settings
+    </button>
+  </nav>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  role: null,               // 'user' | 'caregiver'
+  mode: 'demo',             // 'demo' | 'live'
+  device: null,             // BLE device object when connected
+  connected: false,
+
+  // Live data — updated by mock tick or BLE callbacks
+  data: {
+    hr:        72,
+    steps:     2847,
+    battery:   84,
+    spo2:      97,
+    active:    42,
+    worn:      true,
+    fall:      false,
+  },
+
+  contacts: [
+    { name: 'Farah (daughter)', phone: '+60 12-345 6789', primary: true  },
+    { name: 'Ahmad (son)',      phone: '+60 19-876 5432', primary: false },
+  ],
+
+  // Mocked session history
+  history: [
+    { date: 'Today',     time: '08:14', duration: '42 min', steps: 2847, distance: '2.3 km', falls: 0 },
+    { date: 'Yesterday', time: '17:30', duration: '1h 12m', steps: 5120, distance: '4.1 km', falls: 0 },
+    { date: 'Yesterday', time: '07:45', duration: '38 min', steps: 2103, distance: '1.8 km', falls: 0 },
+    { date: '18 Apr',    time: '07:58', duration: '9h 03m', steps: 0,    distance: '4.4 km', falls: 0 },
+    { date: '17 Apr',    time: '16:20', duration: '52 min', steps: 3890, distance: '3.2 km', falls: 1 },
+  ],
+};
+
+/* ============================================================
+   PERSISTENCE
+   ============================================================ */
+function save() {
+  try {
+    localStorage.setItem('tiga_state', JSON.stringify({
+      role: state.role, mode: state.mode, contacts: state.contacts
+    }));
+  } catch (e) { console.warn('localStorage unavailable'); }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem('tiga_state');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved.role)     state.role     = saved.role;
+    if (saved.mode)     state.mode     = saved.mode;
+    if (saved.contacts) state.contacts = saved.contacts;
+  } catch (e) { console.warn('Could not restore state'); }
+}
+
+/* ============================================================
+   ROLES & NAVIGATION
+   ============================================================ */
+function setRole(role) {
+  state.role = role;
+  save();
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display   = 'flex';
+  applyRole();
+  updateUI();
+}
+
+function applyRole() {
+  const nameEl  = document.getElementById('user-name');
+  const modeEl  = document.getElementById('user-mode');
+  const avatar  = document.getElementById('avatar');
+  const navLbl  = document.getElementById('nav-alerts-label');
+  const aTitle  = document.getElementById('alerts-title');
+  const aSub    = document.getElementById('alerts-subtitle');
+  const cRole   = document.getElementById('current-role');
+
+  if (state.role === 'caregiver') {
+    nameEl.textContent    = 'Caregiver view';
+    avatar.textContent    = 'C';
+    navLbl.textContent    = 'Alerts';
+    aTitle.textContent    = 'Alerts';
+    aSub.textContent      = 'Recent events from your wearers';
+    cRole.textContent     = 'Currently: Caregiver';
+  } else {
+    nameEl.textContent    = 'Welcome back';
+    avatar.textContent    = 'W';
+    navLbl.textContent    = 'Emergency';
+    aTitle.textContent    = 'Emergency';
+    aSub.textContent      = 'Your emergency contacts';
+    cRole.textContent     = 'Currently: Wearer';
+  }
+  modeEl.textContent = state.mode === 'demo' ? 'Demo mode' : 'Live device';
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('nav.bottom button').forEach(b => {
+    b.classList.toggle('active', b.dataset.screen === name);
+  });
+}
+
+function switchRole() {
+  state.role = (state.role === 'user') ? 'caregiver' : 'user';
+  save();
+  applyRole();
+  toast('Switched to ' + (state.role === 'user' ? 'Wearer' : 'Caregiver') + ' mode');
+}
+
+function logout() {
+  state.role = null;
+  save();
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('app').style.display   = 'none';
+}
+
+/* ============================================================
+   MOCK DATA GENERATOR
+   ============================================================ */
+function mockTick() {
+  if (state.mode !== 'demo') return;
+
+  // HR: drift gently in a realistic range
+  const hrDrift = (Math.random() - 0.5) * 4;
+  state.data.hr = Math.max(60, Math.min(90,
+    Math.round(state.data.hr + hrDrift)));
+
+  // Steps: increment slowly
+  state.data.steps += Math.floor(Math.random() * 3);
+
+  // Battery: lose 1% every ~30 ticks (every 60s in demo)
+  if (Math.random() < 0.03) {
+    state.data.battery = Math.max(0, state.data.battery - 1);
+  }
+
+  // SpO2: hover 96-99
+  state.data.spo2 = 96 + Math.floor(Math.random() * 4);
+
+  // Active minutes: slow increment
+  if (Math.random() < 0.05) state.data.active++;
+
+  updateUI();
+}
+
+/* ============================================================
+   UI UPDATE
+   ============================================================ */
+function updateUI() {
+  const d = state.data;
+  document.getElementById('hr-value').textContent      = d.hr;
+  document.getElementById('steps-value').textContent   = d.steps.toLocaleString();
+  document.getElementById('battery-value').innerHTML   = d.battery + '<span class="card-unit">%</span>';
+  document.getElementById('spo2-value').innerHTML      = d.spo2    + '<span class="card-unit">%</span>';
+  document.getElementById('active-value').innerHTML    = d.active  + '<span class="card-unit">min</span>';
+
+  // HR status text
+  const hrStatus = document.getElementById('hr-status');
+  if      (d.hr < 50)  hrStatus.textContent = 'Low — please rest';
+  else if (d.hr < 60)  hrStatus.textContent = 'Resting, calm';
+  else if (d.hr <= 90) hrStatus.textContent = 'Steady and healthy';
+  else if (d.hr <= 110)hrStatus.textContent = 'Active — working hard';
+  else                 hrStatus.textContent = 'High — take a rest';
+
+  // Battery estimate (very rough)
+  const hoursLeft = Math.round(d.battery * 0.2);
+  document.getElementById('battery-detail').textContent = '~' + hoursLeft + 'h remaining';
+
+  // Connection chip
+  const chip = document.getElementById('connection-chip');
+  const txt  = document.getElementById('connection-text');
+  if (state.mode === 'demo') {
+    chip.className = 'chip ok';
+    txt.textContent = 'Demo';
+  } else if (state.connected) {
+    chip.className = 'chip ok';
+    txt.textContent = 'Connected';
+  } else {
+    chip.className = 'chip warn';
+    txt.textContent = 'Disconnected';
+  }
+
+  // Update settings mode line
+  document.getElementById('mode-detail').textContent =
+    state.mode === 'demo' ? 'Using simulated demo data' : 'Using live TIGA device';
+
+  renderHistory();
+  renderContacts();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  let lastDate = null;
+  state.history.forEach(h => {
+    if (h.date !== lastDate) {
+      const d = document.createElement('div');
+      d.className = 'history-date';
+      d.textContent = h.date;
+      list.appendChild(d);
+      lastDate = h.date;
+    }
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-item-main">
+        <div class="list-item-title">Walk at ${h.time}</div>
+        <div class="list-item-sub">${h.duration} · ${h.steps.toLocaleString()} steps · ${h.distance}</div>
+      </div>
+      <div class="list-item-right">${h.falls ? '⚠' : '›'}</div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function renderContacts() {
+  const list = document.getElementById('contacts-list');
+  list.innerHTML = '';
+  state.contacts.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-item-main">
+        <div class="list-item-title">${c.name}${c.primary ? ' ★' : ''}</div>
+        <div class="list-item-sub">${c.phone}</div>
+      </div>
+      <div class="list-item-right">›</div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+/* ============================================================
+   BLE SCAN — scaffolding only, not wired to real firmware yet
+   ============================================================ */
+async function scanForDevice() {
+  if (!navigator.bluetooth) {
+    toast('Web Bluetooth not available on this browser');
+    return;
+  }
+  try {
+    toast('Scanning for TIGA device…');
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'TIGA' }],
+      optionalServices: ['0000180d-0000-1000-8000-00805f9b34fb']  // Heart Rate service
+    });
+    state.device    = device;
+    state.connected = true;
+    state.mode      = 'live';
+    save();
+    toast('Connected to ' + device.name);
+    document.getElementById('device-status').textContent = 'Paired: ' + device.name;
+    updateUI();
+    applyRole();
+  } catch (e) {
+    toast('Connection cancelled or failed');
+  }
+}
+
+function toggleMode() {
+  if (state.mode === 'demo') {
+    toast('Switch to Live mode by connecting a device');
+    scanForDevice();
+  } else {
+    state.mode = 'demo';
+    state.connected = false;
+    save();
+    updateUI();
+    applyRole();
+    toast('Switched to demo mode');
+  }
+}
+
+/* ============================================================
+   EMERGENCY ACTIONS
+   ============================================================ */
+function triggerSOS() {
+  if (!confirm('Send SOS alert to all emergency contacts?')) return;
+  toast('SOS sent (demo — no real message)');
+}
+
+function addContact() {
+  const name  = prompt('Contact name:');
+  if (!name) return;
+  const phone = prompt('Phone number:');
+  if (!phone) return;
+  state.contacts.push({ name, phone, primary: false });
+  save();
+  updateUI();
+  toast('Contact added');
+}
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  load();
+
+  // Greeting
+  const h = new Date().getHours();
+  let greeting = 'Good evening';
+  if      (h < 12) greeting = 'Good morning';
+  else if (h < 18) greeting = 'Good afternoon';
+  document.getElementById('home-greeting').textContent = greeting;
+
+  if (state.role) {
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display   = 'flex';
+    applyRole();
+  } else {
+    document.getElementById('login').style.display = 'flex';
+    document.getElementById('app').style.display   = 'none';
+  }
+
+  updateUI();
+  setInterval(mockTick, 2000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+/* Register service worker for PWA install */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {
+    /* harmless if sw.js not present */
+  });
+}
+</script>
+</body>
+</html>
