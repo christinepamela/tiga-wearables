@@ -8,8 +8,21 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>TIGA — Health Companion</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<!-- Leaflet loaded asynchronously with fallback (some sandboxed previews block CDNs) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" onerror="window.__leafletCssBlocked=true"/>
+<script>
+window.__leafletReady = false;
+window.__leafletBlocked = false;
+(function loadLeaflet() {
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  s.crossOrigin = '';
+  s.async = true;
+  s.onload = () => { window.__leafletReady = true; };
+  s.onerror = () => { window.__leafletBlocked = true; console.warn('[TIGA] Leaflet blocked, using SVG fallback'); };
+  document.head.appendChild(s);
+})();
+</script>
 
 <!--
 ===============================================================
@@ -26,6 +39,8 @@
     - Bitchat link in Settings → "Connect with others" (App Store link)
     - Debug logs gated behind DEBUG flag
     - Better empty states
+    - Map: dual renderer (Leaflet on real web hosting, SVG fallback
+      when CDN is blocked, e.g. in sandboxed previews)
   Carries forward from v0.3:
     - 4-tab nav: Home / Advanced / Emergency / Settings
     - Walk tracker with mock GPS map (Leaflet + OpenStreetMap)
@@ -1902,11 +1917,35 @@ function showWalkDetail(walkId) {
 }
 
 function renderMap(route) {
+  const container = document.getElementById('map-container');
   if (!route || !route.length) {
-    document.getElementById('map-container').classList.add('hidden');
+    container.classList.add('hidden');
     return;
   }
-  document.getElementById('map-container').classList.remove('hidden');
+  container.classList.remove('hidden');
+
+  /* Choose renderer based on Leaflet availability */
+  if (typeof L !== 'undefined' && window.__leafletReady) {
+    renderMapLeaflet(route);
+  } else if (window.__leafletBlocked || typeof L === 'undefined') {
+    /* Wait briefly for Leaflet to load before falling back */
+    let waited = 0;
+    const interval = setInterval(() => {
+      waited += 100;
+      if (typeof L !== 'undefined' && window.__leafletReady) {
+        clearInterval(interval);
+        renderMapLeaflet(route);
+      } else if (window.__leafletBlocked || waited >= 1500) {
+        clearInterval(interval);
+        renderMapSVG(route);
+      }
+    }, 100);
+  } else {
+    renderMapSVG(route);
+  }
+}
+
+function renderMapLeaflet(route) {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
   mapInstance = L.map('map-container', { zoomControl: false, attributionControl: false }).setView(route[0], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1916,6 +1955,60 @@ function renderMap(route) {
   L.circleMarker(route[0], { radius:7, color:'#fff', fillColor:'#4ade80', fillOpacity:1, weight:2 }).addTo(mapInstance);
   L.circleMarker(route[route.length-1], { radius:7, color:'#fff', fillColor:'#ef4444', fillOpacity:1, weight:2 }).addTo(mapInstance);
   mapInstance.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+}
+
+function renderMapSVG(route) {
+  /* Fallback: draw the route as a styled SVG on a stylized background.
+     Used when Leaflet CDN is blocked (e.g. Claude preview sandbox).
+     On real web hosting (GitHub Pages, etc.) the Leaflet path runs instead. */
+  const container = document.getElementById('map-container');
+  const w = container.clientWidth || 350;
+  const h = 280;
+
+  /* Bounding box of route */
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  route.forEach(p => {
+    minLat = Math.min(minLat, p[0]); maxLat = Math.max(maxLat, p[0]);
+    minLng = Math.min(minLng, p[1]); maxLng = Math.max(maxLng, p[1]);
+  });
+  const latRange = (maxLat - minLat) || 0.001;
+  const lngRange = (maxLng - minLng) || 0.001;
+  const padding = 30;
+
+  /* Project lat/lng to SVG coordinates (y flipped because lat increases northward) */
+  const project = (lat, lng) => {
+    const x = padding + ((lng - minLng) / lngRange) * (w - 2*padding);
+    const y = padding + ((maxLat - lat) / latRange) * (h - 2*padding);
+    return [x, y];
+  };
+
+  const points = route.map(p => project(p[0], p[1]));
+  const pathData = points.map((pt, i) => (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1)).join(' ');
+  const startPt = points[0];
+  const endPt = points[points.length - 1];
+
+  /* Subtle grid pattern as the "map" background */
+  container.innerHTML = `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#262626" stroke-width="1"/>
+        </pattern>
+        <radialGradient id="bgFade" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stop-color="#1f1f1f"/>
+          <stop offset="100%" stop-color="#161616"/>
+        </radialGradient>
+      </defs>
+      <rect width="${w}" height="${h}" fill="url(#bgFade)"/>
+      <rect width="${w}" height="${h}" fill="url(#grid)"/>
+      <path d="${pathData}" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+      <circle cx="${startPt[0]}" cy="${startPt[1]}" r="7" fill="#4ade80" stroke="#fff" stroke-width="2"/>
+      <circle cx="${endPt[0]}" cy="${endPt[1]}" r="7" fill="#ef4444" stroke="#fff" stroke-width="2"/>
+      <text x="${startPt[0] + 12}" y="${startPt[1] + 4}" font-size="11" fill="#888" font-family="-apple-system, sans-serif">Start</text>
+      <text x="${endPt[0] + 12}" y="${endPt[1] + 4}" font-size="11" fill="#888" font-family="-apple-system, sans-serif">End</text>
+      <text x="${w - 10}" y="${h - 10}" font-size="10" fill="#444" text-anchor="end" font-family="-apple-system, sans-serif">Route preview</text>
+    </svg>
+  `;
 }
 
 function renderContacts() {
