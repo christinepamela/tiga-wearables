@@ -1,0 +1,316 @@
+# TIGA Tech Debt Backlog
+
+This document captures known limitations, scaffolds awaiting real implementation, deferred features, and design decisions to revisit. It is not a wishlist. Items here have been intentionally deprioritized in favor of higher-priority work, but should not be forgotten.
+
+When something on this list is ready to be addressed, move it from here into a sprint plan or milestone.
+
+---
+
+## App
+
+### App-1: Real GPS integration
+**Current state:** Walks display mock GPS routes from a hardcoded array of coordinates in Petaling Jaya. The map is real Leaflet + OpenStreetMap, but the route data is fake.
+
+**What is needed:**
+- Device-side: NEO-6M GPS reads coordinates during walk session, stores them in firmware buffer.
+- BLE service: stream coordinates from device to app every few seconds during a walk.
+- App-side: replace mock route with live or last-walk coordinates received over BLE.
+- Fallback: when device offline, optionally use phone's `navigator.geolocation` API to record a track in the app.
+
+**Why deferred:** Requires firmware v6 BLE service expansion. Mock route is sufficient to demonstrate the feature in v0.3 and v0.4.
+
+**Priority:** High. Target v0.5 alongside firmware v6 BLE wire-up.
+
+---
+
+### App-2: Whole-body wellness measurement system
+**Current state:** Mood is a separate emoji log. Health metrics are a separate list of cards. There is no unified "how am I doing today" representation.
+
+**What is needed:**
+- A visual element that combines subjective (mood, symptoms) and objective (HR, gait, sleep, etc.) data into a single coherent status.
+- Avoid: condescending scoring (e.g., "Wellness: 7/10"), red-amber-green traffic lights that feel medical, infantilizing metaphors (plant blooming, etc.).
+- Possible directions: 4-dimensional "rings" like Apple, segmented body silhouette with quiet color zones, narrative summary ("Today you have been steady, with a gentle morning walk"), or something else entirely.
+
+**Why deferred:** Needs research into elderly UX, probably needs user testing with real seniors, definitely needs more than one developer's intuition. Premature solution would be worse than no solution.
+
+**Priority:** Medium. Target v0.6+ after we have real sensor data flowing and can prototype with actual numbers.
+
+---
+
+### App-3: PWA offline support
+**Current state:** `sw.js` registers as a service worker but does not cache anything. App requires connection to load.
+
+**What is needed:**
+- Cache index.html, manifest.json, and any inline assets so the app loads instantly and works offline.
+- Cache Leaflet library and recent map tiles so previous walk maps render without connection.
+- Strategy: cache-first for app shell, network-first for data, with fallback to cached data on network error.
+
+**Why deferred:** Not blocking any other work. Better to land features first, then optimize offline.
+
+**Priority:** Medium. Target v0.5 after core features stable.
+
+---
+
+### App-4: Self-test live measurement integration
+**Current state:** Tapping a self-test shows a toast: "Live test available with proto 3 firmware." Tests are described but not executable.
+
+**What is needed:**
+- Countdown timer UI for each test (30s for balance sway, etc.)
+- Sensor data collection during the test (MPU6050 sway, MAX30102 HR, etc.)
+- Result calculation (baseline comparison, scoring)
+- Storage in user log
+- Display of historical results
+
+**Why deferred:** Needs proto 3 firmware in place. Needs MAX30102 wired and reading. Test scoring algorithms need clinical research.
+
+**Priority:** High once firmware v6 exists. Target v0.5.
+
+---
+
+### App-5: PDF export with embedded map snapshots
+**Current state:** PDF export hides maps entirely (Leaflet does not print well). Walk history shows as text only.
+
+**What is needed:**
+- Pre-render each walk's route as a static PNG at export time.
+- Embed PNG inline in the printable section.
+- Test print output on real printers.
+
+**Why deferred:** Static map rendering needs a tile service or canvas-based drawing. Adds complexity. Walk text data is sufficient for doctors.
+
+**Priority:** Low. Target v0.7+ unless doctors specifically request it.
+
+---
+
+### App-6: Caregiver "needs attention" status logic
+**Current state:** Caregiver view always shows "All is well" in mock. There is no logic for when status changes.
+
+**What is needed:**
+- Define triggers: no activity for 4+ hours, fall detected, SOS triggered, device offline for 2+ hours, etc.
+- Aggregate signals into binary states: "All is well" / "Please check in" / "Needs attention."
+- Push notifications to caregiver phone when status escalates.
+
+**Why deferred:** Requires real BLE data and notification infrastructure.
+
+**Priority:** High. Target v0.5 alongside firmware v6.
+
+---
+
+### App-7: Remove debug console.log statements
+**Current state:** v0.3 logs "Migrated contacts from old version" to console for verification.
+
+**What is needed:** Remove the `console.log` statement once the migration logic has been tested in production.
+
+**Priority:** Trivial. Address in next minor release. *(Resolved in v0.4: log moved to a debug-flag conditional.)*
+
+---
+
+### App-8: User profile setup
+**Current state:** Implemented in v0.4. Name, DOB, conditions, doctor info, photo. Used for greetings and PDF report.
+
+**Open follow-ups:**
+- Multi-user profile support (one phone managing multiple wearers — partial scaffolding in v0.3)
+- Photo storage size limits and resizing
+- Conditions list — should we expand beyond diabetes to include hypertension, atrial fibrillation, COPD, etc.? Each adds metric prominence logic.
+
+**Priority:** Medium. Iterate as users surface needs.
+
+---
+
+### App-9: Localization / translation
+**Current state:** All UI text in English.
+
+**What is needed:**
+- Extract strings to a translations object
+- Support at minimum: English, Malay (Bahasa Malaysia), Mandarin Chinese, Tamil — the four main languages of Malaysia.
+- Date/number/currency formatting per locale.
+- RTL support for languages that require it (not strictly needed for these four, but good architecture).
+
+**Why deferred:** Strings are still in flux, not worth translating before stabilizing.
+
+**Priority:** High before any public release. Target v0.8.
+
+---
+
+## Firmware
+
+### FW-1: Watch face system implementation
+**Current state:** Firmware shows debug info screens. No analog watch face.
+
+**What is needed:** See `WATCH-FACES.md` for full spec. v6 ships with one face (Classic) and the hand-drawing math.
+
+**Priority:** High. Target v6 firmware.
+
+---
+
+### FW-2: BLE service for live data streaming
+**Current state:** v5.2 firmware has basic BLE characteristic for export data. No live streaming.
+
+**What is needed:**
+- Define BLE characteristics for live HR, steps, walk session start/stop/data, alerts, etc.
+- App-side BLE client to subscribe and receive notifications.
+- Connection management (reconnect on disconnect, etc.)
+
+**Priority:** Critical for v0.5+. Target v6 firmware.
+
+---
+
+### FW-3: Power optimization
+**Current state:** ESP32 runs at default frequency, MPU6050 polls continuously, display always on (when on). Battery life ~12-18 hours.
+
+**What is needed:**
+- Light sleep between sensor reads
+- MAX30102 INT pin wired and used to wake on finger detection
+- MPU6050 motion-triggered wake (raise-to-wake)
+- Display dim mode with periodic refresh only
+- ESP32 frequency scaling under low load
+
+**Target:** 24-48 hour battery life on 1000mAh.
+
+**Priority:** High. Target v6 firmware iteration after basic feature set works.
+
+---
+
+### FW-4: Vibration motor patterns
+**Current state:** Motor not yet wired. Once wired (v6), driving will be on/off only.
+
+**What is needed:** Pattern library for tactile alerts:
+- Gentle pulse (medication reminder)
+- Triple tap (notification)
+- Long buzz (low battery warning)
+- Heartbeat pattern (SOS confirmation)
+- Etc.
+
+Research: what tactile patterns elderly users find pleasant vs alarming.
+
+**Priority:** Medium. Target v7 firmware after basic motor working.
+
+---
+
+### FW-5: OTA firmware updates
+**Current state:** Firmware updates require physical USB connection.
+
+**What is needed:**
+- ESP32 OTA partition setup
+- BLE-based or WiFi-based firmware download
+- Rollback if update fails
+- Version reporting in app
+
+**Why deferred:** Adds complexity. Acceptable to require USB for now while we iterate.
+
+**Priority:** Low until first user with the device. Target v8+.
+
+---
+
+## Hardware
+
+### HW-1: Custom PCB
+**Current state:** Breadboard prototype with multiple breakouts.
+
+**What is needed:**
+- Schematic capture (KiCad)
+- PCB layout for watch form factor (~40mm round or 35×40mm rectangular)
+- All components in SMD where possible
+- Battery + charging circuit integrated
+- Manufacturing files (Gerbers)
+- First-run from JLCPCB or similar
+
+**Priority:** High after firmware v6 is solid. Target post-v6.
+
+---
+
+### HW-2: Enclosure design
+**Current state:** No enclosure. Breadboard.
+
+**What is needed:**
+- 3D-modeled watch case (CAD)
+- Strap mounting
+- Display window
+- Button cutouts
+- Charging port access
+- 3D printed first version, eventually injection-molded
+
+**Priority:** High after PCB exists. Target post-v6.
+
+---
+
+### HW-3: Battery and charging
+**Current state:** 1000mAh LiPo soldered direct, USB-C charging via LilyGO board.
+
+**What is needed:**
+- Smaller battery for watch form factor (~200mAh likely)
+- Wireless charging coil (Qi)
+- Battery management IC
+- Charging dock design
+
+**Priority:** Tied to PCB design. Target post-v6.
+
+---
+
+## Documentation
+
+### DOC-1: User onboarding flow design
+**Current state:** App opens to role chooser. No tutorial, no setup wizard.
+
+**What is needed:**
+- First-run wizard: name, DOB, conditions, contacts, watch face, pair device
+- Help tooltips on key features
+- "How to wear your TIGA" guide (with photos)
+
+**Priority:** High before any public release. Target v0.7.
+
+---
+
+### DOC-2: Caregiver onboarding
+**Current state:** Caregiver mode exists but no setup flow.
+
+**What is needed:**
+- Invite link from wearer to caregiver
+- Caregiver app installation walkthrough
+- Permissions explanation (what they will and will not see)
+
+**Priority:** Medium. Target v0.7.
+
+---
+
+## Privacy and security
+
+### PRI-1: Data storage and retention policy
+**Current state:** Data stored in browser localStorage, no encryption, no retention policy.
+
+**What is needed:**
+- Decide what data lives where (device, phone, cloud)
+- Encryption at rest for sensitive logs
+- Retention rules (auto-delete data older than X)
+- User-initiated data export and deletion
+- GDPR / Malaysian PDPA compliance review
+
+**Priority:** Critical before any user data is collected. Address before public release.
+
+---
+
+### PRI-2: BLE pairing security
+**Current state:** Open BLE characteristic without bonding.
+
+**What is needed:**
+- BLE bonding with passkey
+- Encrypted characteristics for personal data
+- Pairing flow in app
+
+**Priority:** High. Target v0.6.
+
+---
+
+## Items completed (kept for reference)
+
+- ~~App-7: Remove debug console.log~~ — moved to debug-flag conditional in v0.4
+- ~~Move Advanced from Settings to top-level nav~~ — done in v0.3
+- ~~Toast position overlap fix~~ — done in v0.3
+- ~~localStorage version migration~~ — done in v0.3
+- ~~Mood logging consistent date format~~ — done in v0.3
+
+---
+
+*This document is updated whenever a tech debt item is identified or resolved. It is not exhaustive — items in progress or quickly resolved may not appear.*
+
+## Changelog
+- 2026 build session — initial draft compiling all known deferred items
