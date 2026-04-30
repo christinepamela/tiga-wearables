@@ -1,0 +1,290 @@
+# TIGA Watch Faces
+
+The watch face system is what makes the TIGA wearable feel like *a watch* rather than *a gadget*. This document specifies how it works — both the user experience and the technical implementation.
+
+---
+
+## Why watch faces matter
+
+Most fitness wearables look the same: a black rectangle with digital readouts. They are functional but generic. They do not feel personal. They do not feel like something you would choose to wear.
+
+TIGA takes a different approach. The wearable's home screen renders a beautifully drawn analog watch face. Users pick from a library of designs that suit their taste. The face is what the user sees most of the time — health data is one tap or button press away, not constantly imposed.
+
+This decision has three consequences:
+
+1. **TIGA looks like a watch, even though it is a sensor platform.** Wearers can show it off without feeling embarrassed about wearing a "medical device."
+2. **The same hardware serves different users.** The bank executive picks a Patek-style face. The artistic auntie picks a Dalí melting watch. The morning hiker picks a sport face. Same PCB inside, different soul.
+3. **It becomes a giftable object.** A daughter giving her mother a TIGA-with-classic-face is giving an heirloom-style item, not a clinical tracker.
+
+---
+
+## User experience
+
+### Default behavior
+- Watch face displayed at all times, dimly lit
+- Hands move smoothly to current time
+- Battery indicator shows in a small corner of the face
+- No other information is shown by default
+
+### Raise-to-wake
+- MPU6050 detects the wrist-raise motion
+- Display brightens to full brightness for 5 seconds
+- Returns to dim afterward
+
+### Tap (piezo) to cycle info screens
+- Tap once: Heart rate (large bpm number, "Steady and healthy" caption)
+- Tap twice: Steps today (large number, "of 3,000 goal")
+- Tap three times: SpO2 (oxygen %), elevation, etc.
+- 5 seconds later: returns to watch face automatically
+
+### Button press
+- BTN1 short press: cycle info screens (same as tap)
+- BTN1 long press (3s): sleep / power off
+- BTN2 short press: confirm/dismiss
+- BTN2 long press (3s): SOS escalation
+
+### Choose your face
+- App: Settings → Watch face
+- Preview gallery of available faces
+- Tap to set
+- Selection syncs to watch via BLE
+- Effective immediately
+
+---
+
+## Initial face library
+
+For firmware v6, ship with **one face only** (Classic). Add more in subsequent versions.
+
+The full target library:
+
+### 1. Classic
+A clean, traditional watch face. Thin Roman numerals, slim hour and minute hands, second hand. Inspired by mid-century dress watches. Suits any setting.
+
+**Aesthetic:** Restrained, elegant, timeless.
+**Target user:** Most people. Default choice.
+**Color palette:** Off-white background, dark numerals and hands.
+
+### 2. Sport
+Bold sans-serif numerals (1, 3, 5, 7, 9, 11) with markers for the others. Thicker hands. Optional date window. Inspired by Rolex Submariner / Speedmaster.
+
+**Aesthetic:** Confident, legible, masculine-leaning but neutral.
+**Target user:** Active 50-65 users, morning walkers, people who want clarity.
+**Color palette:** Black background, white numerals and hands, optional small green accent at 12 o'clock.
+
+### 3. Modern
+Bauhaus-inspired minimalism. No numerals, just thin tick marks at 12/3/6/9. Sleek hands. A single dot at the center.
+
+**Aesthetic:** Quiet, contemporary, design-forward.
+**Target user:** Architects, designers, anyone who appreciates restraint.
+**Color palette:** Pure white background, black hands and ticks. Or inverted: black background with white.
+
+### 4. Festive
+Rotating seasonal designs. Examples:
+- December: Snowflake patterns at the markers
+- Lunar New Year: Subtle red-and-gold motifs
+- Eid: Star and crescent at 12 o'clock
+- Birthdays of the wearer: Small candle icon
+
+Switches automatically at the relevant time of year, returns to chosen default after.
+
+**Aesthetic:** Playful but tasteful, never gaudy.
+**Target user:** Anyone who likes seasonal touches.
+
+### 5. Art (future, post-v0.6)
+Curated artistic interpretations. Examples:
+- Salvador Dalí "Persistence of Memory" melting clock
+- Paul Klee-inspired geometry
+- Hokusai wave at the 12 o'clock position
+
+These take significant design work — likely commissioned art, not stock.
+
+**Aesthetic:** Statement piece, conversation starter.
+**Target user:** Artistically inclined, those who want to make a personal statement.
+
+### 6. Custom (future, post-v1.0)
+User uploads their own background image via the app. We add hands. Their wedding photo, a child's drawing, a landscape — anything.
+
+**Aesthetic:** Whatever the user wants.
+**Target user:** Anyone seeking maximum personalization.
+
+---
+
+## Technical implementation
+
+### Display
+- LilyGO T-Display-S3 has a 170×320 pixel ST7789 IPS display
+- Color (RGB565)
+- Fast SPI refresh — easily handles smooth hand movement
+- Backlight controllable via PWM for dim/bright modes
+
+### Drawing approach
+
+**Background (the "face"):**
+- Stored as a bitmap file in SPIFFS partition
+- One file per face design, loaded at startup
+- Pre-rendered by designer (offline) at exact 170×320 resolution
+- Optimized format: 16-bit RGB565 raw or RLE compressed
+
+**Hands:**
+- Drawn at runtime using TFT_eSPI's `drawWideLine()` or anti-aliased polygons
+- Positions calculated from current time using sin/cos
+- Hour, minute, and (optional) second hand drawn over background
+- Each hand a different color/width depending on face design (configured in face metadata)
+
+**Center cap:**
+- A small filled circle at the center of the watch face
+- Consistent across faces, but color-tunable per face
+
+### Pseudocode
+
+```cpp
+// Once at startup, after user selects a face:
+loadFaceFromSPIFFS("faces/classic.bin", faceBuffer);
+
+// Every frame (or every minute in dim mode):
+void drawWatchFace() {
+  // Draw the pre-rendered face background
+  tft.pushImage(0, 0, 170, 320, faceBuffer);
+
+  // Calculate hand angles
+  time_t now = time(nullptr);
+  struct tm *t = localtime(&now);
+  float hourAngle   = ((t->tm_hour % 12) + t->tm_min / 60.0) * 30.0;
+  float minuteAngle = t->tm_min * 6.0;
+  float secondAngle = t->tm_sec * 6.0;
+
+  // Draw hour hand (thick, short)
+  drawHand(centerX, centerY, hourAngle, HOUR_LENGTH, HOUR_WIDTH, faceConfig.hourColor);
+
+  // Draw minute hand (thinner, longer)
+  drawHand(centerX, centerY, minuteAngle, MINUTE_LENGTH, MINUTE_WIDTH, faceConfig.minuteColor);
+
+  // Draw second hand (thinnest, full reach) — only in bright mode
+  if (brightMode) {
+    drawHand(centerX, centerY, secondAngle, SECOND_LENGTH, SECOND_WIDTH, faceConfig.secondColor);
+  }
+
+  // Draw center cap
+  tft.fillCircle(centerX, centerY, CAP_RADIUS, faceConfig.capColor);
+
+  // Draw battery indicator at top-right
+  drawBattery(150, 10, currentBatteryPercent);
+}
+```
+
+### Face metadata format
+
+Each face has a small config (stored alongside the bitmap) that describes:
+
+```json
+{
+  "name": "Classic",
+  "id": "classic",
+  "hourColor":     "#222222",
+  "minuteColor":   "#222222",
+  "secondColor":   "#c92a2a",
+  "capColor":      "#222222",
+  "hourLength":    50,
+  "minuteLength":  70,
+  "secondLength":  75,
+  "hourWidth":     5,
+  "minuteWidth":   3,
+  "secondWidth":   1,
+  "centerX":       85,
+  "centerY":       160,
+  "showBattery":   true,
+  "showSeconds":   false,
+  "tickColors":    "#222222"
+}
+```
+
+### Power management
+
+The watch face must be drawable in *low-power mode* most of the time. Approach:
+
+- **Always-on dim mode:** Backlight at 10%, refresh once per minute (just hour and minute hands move). No second hand.
+- **Bright mode (raise-to-wake or button):** Backlight at 100%, second hand drawn, refresh every second.
+- After 5 seconds of bright mode with no further interaction, return to dim.
+
+The MPU6050 wake-up interrupt allows us to keep the ESP32 in light sleep most of the time and only wake on motion. This is critical for battery life with always-on display.
+
+### Switching faces
+
+When the user picks a face in the app:
+
+1. App sends BLE command: `SET_FACE: classic`
+2. Firmware writes choice to NVS (non-volatile storage)
+3. On next display refresh, firmware loads the new face bitmap from SPIFFS
+4. Previous face stays in cache until first redraw
+
+If a chosen face is not yet on the watch (e.g., custom face uploaded by user), the app sends the bitmap data in chunks via BLE. The watch stores it in SPIFFS and uses it. This is the path to user-generated content but is post-v1.0.
+
+---
+
+## Asset pipeline
+
+### How face designs are created
+
+1. **Designer draws the face** at higher resolution (e.g., 1700×3200) in any vector or raster tool. Photoshop, Figma, Inkscape — anything.
+2. **Export at 170×320** as PNG or BMP.
+3. **Convert to RGB565 raw** using a tool (`lv_img_conv`, `image2cpp`, or custom Python script).
+4. **Add metadata JSON** with hand positions, colors, etc.
+5. **Bundle into firmware** as part of SPIFFS partition.
+
+For v6 firmware, we ship one face: **Classic**. The bitmap is generated by hand or commissioned. The hand-drawing math is library code that does not change between faces — only the background bitmap and metadata change.
+
+### Future: user uploads via app
+
+In v1.0+, users can upload their own watch face background:
+
+1. User picks an image in the app (gallery or camera)
+2. App resizes to 170×320, applies a "watch face" template (oval mask, dimming for hand legibility)
+3. App sends bytes via BLE to watch
+4. Watch stores in SPIFFS and uses it
+
+Privacy implication: this image lives on the device, not the cloud. We never see it.
+
+---
+
+## Open questions
+
+1. **Always-on display battery cost** — how much does a dim 10% backlight running 24/7 cost in mAh? Need to test on actual hardware. Apple Watch SE2 with always-on uses ~5% battery per hour. Our display is smaller, but our battery is also smaller (1000mAh).
+
+2. **MPU raise-to-wake reliability** — the algorithm needs tuning. Too sensitive and it wakes up constantly. Not sensitive enough and the user has to shake their wrist. Apple has spent millions on this; we will iterate.
+
+3. **Tap detection latency via piezo** — the piezo signal is fast, but the firmware needs to debounce. Goal is sub-200ms response from tap to screen change. Will test on real hardware.
+
+4. **Face design ownership** — if we use commissioned art, we need licensing. If we use user-uploaded art, we need ToS that says they own the rights.
+
+5. **Sport face vs Classic for v6 default** — currently leaning Classic as default. Could be a setup-time choice during first-run.
+
+---
+
+## Roadmap
+
+| Version | Watch face features |
+|---------|---------------------|
+| v6 firmware | One face (Classic). Hand-drawing math working. Raise-to-wake. Tap-to-cycle-info. |
+| v7 firmware | Add Sport and Modern faces. App settings to switch faces. |
+| v8 firmware | Add Festive (seasonal auto-rotation). |
+| v9+ | Art faces (commissioned). User-uploaded backgrounds. |
+
+Each version is a meaningful step. We do not try to ship the whole library at once.
+
+---
+
+## Why this matters
+
+A blood pressure cuff is bought when the user has high blood pressure. A pacemaker is implanted when the user needs a pacemaker. These are *medical objects* — purposeful, but cold.
+
+A wedding ring is worn because of what it means.
+
+We want TIGA to feel closer to the second category. The watch face system is how we get there.
+
+---
+
+*This document is the technical spec for the watch face system. Update as the implementation progresses.*
+
+## Changelog
+- 2026 build session — initial draft after design conversations
