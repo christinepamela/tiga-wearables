@@ -8,15 +8,22 @@ It is not a style guide (those live in code: `--accent`, `--surface`, etc.). It 
 
 ## Who we design for
 
-TIGA's primary user is an adult between **50 and 80 years old**. This range is wide on purpose. Health concerns begin in earnest in the 40s and 50s — joint pain, perimenopause, blood pressure, sleep changes, cholesterol, anxiety about parents aging. By the 60s and 70s, most people have at least one chronic condition. By the 80s, the focus shifts toward fall prevention, medication adherence, and staying connected.
+TIGA is for **people whose health needs more attention than a typical adult**. This is age-correlated but not age-defined. In practice, our primary user is:
 
-We resist the urge to design *only* for the 80-year-old user. That would mean dumbing things down for everyone else. Instead we follow:
+- **Adults aged 55 and above**, where chronic conditions, fall risk, medication adherence, and the desire to share peace of mind with family become central concerns.
+- **Anyone who needs caretaking regardless of age** — someone recovering from a stroke, living with early-onset cognitive decline, going through cancer treatment, post-surgery recovery, or managing a chronic illness that requires monitoring.
+
+We do not target the wellness-and-fitness-tracker market (Apple Watch, Garmin, Fitbit). Those products serve healthy people optimizing performance. TIGA serves people for whom health is a real daily concern.
+
+By the 60s and 70s, most users will have at least one chronic condition. By the 80s, the focus shifts toward fall prevention, medication adherence, and staying connected with family. Our design must serve all of these without losing the dignity of the user.
+
+We resist the urge to design *only* for the most fragile user. That would mean dumbing things down for everyone else. Instead we follow:
 
 > **Simple by default, deep when invited.**
 
-The Home screen looks calm and uncluttered for the 80-year-old. The same screen has expandable sections, advanced metrics, and customization for the 60-year-old fitness enthusiast. Same app, different depths.
+The Home screen looks calm and uncluttered for an 80-year-old who just wants reassurance everything is fine. The same screen has expandable sections, advanced metrics, and customization for a 60-year-old who survived a heart attack and now wants to track every detail of recovery. Same app, different depths.
 
-The secondary user is a **caregiver** — typically an adult child or spouse looking after a TIGA wearer. Their needs are different (binary status, peace of mind, no raw medical data), so the app has a separate caregiver mode.
+The secondary user is a **caregiver** — typically an adult child, spouse, or professional carer looking after a TIGA wearer. Their needs are different (binary status, peace of mind, no raw medical data), so the app has a separate caregiver mode.
 
 ---
 
@@ -229,9 +236,9 @@ See `WATCH-FACES.md` for the technical spec.
 When making any design decision, ask:
 
 1. Does this make the user feel **capable, calm, connected, trusted, or joyful**?
-2. Does it serve the **80-year-old** without alienating the **65-year-old**?
+2. Does it serve someone who **needs simple reassurance** without alienating someone who **wants deep detail**?
 3. Is it **quiet by default**, with **depth on demand**?
-4. Would I be **proud to give this to my own mother**?
+4. Would I be **proud to give this to my own mother (or to someone recovering from a serious illness)**?
 
 If yes to all, ship it. If no, rework it.
 
@@ -242,4 +249,6 @@ If unsure, build it and look at it for a day. Often the answer becomes obvious i
 *This document is a living spec. Update it when our understanding deepens or our principles refine. Keep the changelog at the bottom.*
 
 ## Changelog
+- 2026 build session — initial draft after extensive design conversations on age range, watch faces, voice, layout
+- 2026 update — refined "who we design for" to be needs-based not age-based. Primary user is 55+ OR anyone needing caretaking. Removed fitness-tracker market language.
 - 2026 build session — initial draft after extensive design conversations on age range, watch faces, voice, layout
