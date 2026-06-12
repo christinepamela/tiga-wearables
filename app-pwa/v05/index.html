@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TIGA — Field Test v0.5</title>
+<link rel="manifest" href="manifest.json">
+
+<!--
+================================================================
+  TIGA Companion App — v0.5 Field Test Edition
+================================================================
+  Built for proto 3 field testing of firmware v6a.
+  Runs in demo mode (mock data) or live mode (Serial log paste).
+
+  Three data modes:
+    1. Demo   — mock data, no hardware needed
+    2. Serial — paste Serial Monitor output into Log tab
+    3. BLE    — live connection to TIGA-1 device
+
+  BLE service UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
+  BLE data char:    beb5483e-36e1-4688-b7f5-ea07361b26a8
+  Packet: 20 bytes — see tiga_ble.h for full format
+
+  iOS: use Bluefy browser for Web Bluetooth
+  Android/Desktop Chrome: works natively
+
+  Test suites covered:
+    1. Heart rate accuracy (resting vs active)
+    2. SpO2 plausibility
+    3. Step counting (indoor corridor walk)
+    4. Fall detection (controlled drop test)
+    5. Altitude & floor counting (staircase)
+    6. Wearing detection (on/off wrist)
+    7. Alert system (buzzer + motor patterns)
+    8. Battery drain over session
+    9. GPS fix time (outdoor)
+   10. Session export integrity
+================================================================
+-->
+
+<style>
+:root {
+  --bg:          #0a0a0a;
+  --surface:     #141414;
+  --surface-2:   #1e1e1e;
+  --surface-3:   #282828;
+  --border:      #2a2a2a;
+  --text:        #f0f0f0;
+  --muted:       #888;
+  --dim:         #444;
+  --green:       #4ade80;
+  --green-dim:   #14532d;
+  --orange:      #fb923c;
+  --orange-dim:  #7c2d12;
+  --red:         #f87171;
+  --red-dim:     #7f1d1d;
+  --blue:        #60a5fa;
+  --blue-dim:    #1e3a5f;
+  --purple:      #c084fc;
+  --r:           14px;
+  --r-sm:        8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ── App shell ── */
+#app { display: flex; flex-direction: column; height: 100dvh; }
+.screen { flex: 1; overflow-y: auto; padding: 16px 16px 88px; display: none; }
+.screen.active { display: block; }
+
+/* ── Nav ── */
+nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(20,20,20,0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  z-index: 100;
+}
+nav button {
+  flex: 1; background: none; border: none; color: var(--dim);
+  padding: 6px 2px; font-size: 10px; font-weight: 600;
+  cursor: pointer; font-family: inherit; letter-spacing: 0.3px;
+  transition: color 0.15s;
+}
+nav button .ic { display: block; font-size: 20px; margin-bottom: 2px; }
+nav button.active { color: var(--green); }
+
+/* ── Typography ── */
+.page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2px; }
+.page-sub   { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.section-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  margin: 20px 0 8px;
+}
+.section-label:first-child { margin-top: 0; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px 16px; margin-bottom: 10px;
+}
+.card.green-border { border-color: var(--green-dim); }
+.card.orange-border { border-color: var(--orange-dim); }
+.card.red-border { border-color: var(--red-dim); }
+.card.blue-border { border-color: var(--blue-dim); }
+
+/* ── Metric cards ── */
+.metric-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
+}
+.metric-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.metric {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 12px;
+}
+.metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
+.metric-value { font-size: 28px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.metric-value.big { font-size: 38px; }
+.metric-unit  { font-size: 13px; color: var(--muted); margin-left: 2px; font-weight: 400; }
+.metric-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.metric.green .metric-value  { color: var(--green); }
+.metric.orange .metric-value { color: var(--orange); }
+.metric.red .metric-value    { color: var(--red); }
+.metric.blue .metric-value   { color: var(--blue); }
+.metric.purple .metric-value { color: var(--purple); }
+
+/* ── Hero metric ── */
+.hero {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.hero-left .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+.hero-left .value { font-size: 52px; font-weight: 800; letter-spacing: -2px; line-height: 1; }
+.hero-left .sub   { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.hero-right       { font-size: 40px; }
+
+/* ── Status chips ── */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+.chip.ok   .dot { background: var(--green); }
+.chip.warn .dot { background: var(--orange); }
+.chip.bad  .dot { background: var(--red); }
+.chip.info .dot { background: var(--blue); }
+
+/* ── Progress bar ── */
+.progress-wrap { background: var(--surface-2); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
+.progress-bar  { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s; }
+
+/* ── Buttons ── */
+.btn {
+  width: 100%; padding: 14px; border: none; border-radius: var(--r);
+  background: var(--green); color: #000; font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: opacity 0.15s, transform 0.1s;
+  margin-bottom: 8px;
+}
+.btn:active { transform: scale(0.98); opacity: 0.85; }
+.btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.btn.danger    { background: var(--red); color: #fff; }
+.btn.outline   { background: transparent; color: var(--green); border: 1px solid var(--green); }
+.btn.small     { padding: 10px; font-size: 13px; margin-bottom: 0; }
+.btn:disabled  { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Test items ── */
+.test-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px 16px; margin-bottom: 8px;
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.test-status {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface-2); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; margin-top: 1px;
+}
+.test-status.pass  { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.test-status.fail  { background: var(--red-dim);   border-color: var(--red);   color: var(--red); }
+.test-status.run   { background: var(--blue-dim);  border-color: var(--blue);  color: var(--blue); }
+.test-status.skip  { background: var(--surface-3); border-color: var(--dim);   color: var(--dim); }
+.test-body { flex: 1; }
+.test-name   { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.test-desc   { font-size: 12px; color: var(--muted); margin-bottom: 6px; line-height: 1.4; }
+.test-result { font-size: 12px; color: var(--green); font-weight: 500; }
+.test-result.bad { color: var(--red); }
+.test-result.warn { color: var(--orange); }
+.test-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.test-actions .btn { width: auto; padding: 8px 14px; font-size: 12px; margin-bottom: 0; flex: 1; min-width: 80px; }
+
+/* ── Log textarea ── */
+.log-box {
+  width: 100%; height: 180px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px; padding: 10px; resize: none; outline: none;
+  margin-bottom: 8px;
+}
+.log-box::placeholder { color: var(--dim); }
+
+/* ── Log output ── */
+.log-output {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px; font-family: monospace;
+  font-size: 11px; line-height: 1.6; max-height: 300px; overflow-y: auto;
+  margin-bottom: 8px; color: var(--muted);
+}
+.log-output .line-max  { color: var(--green); }
+.log-output .line-bmp  { color: var(--blue); }
+.log-output .line-warn { color: var(--orange); }
+.log-output .line-err  { color: var(--red); }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 90px; left: 12px; right: 12px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: 12px 16px; border-radius: var(--r); font-size: 13px;
+  z-index: 300; transform: translateY(160%);
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  text-align: center;
+}
+#toast.show { transform: translateY(0); }
+
+/* ── Topbar ── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.topbar .wordmark { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: var(--green); }
+.topbar .conn-chip {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--muted); padding: 4px 10px;
+  background: var(--surface-2); border-radius: 20px; border: 1px solid var(--border);
+  cursor: pointer;
+}
+.topbar .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+.topbar .conn-dot.ok   { background: var(--green); }
+.topbar .conn-dot.demo { background: var(--orange); }
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ── Session timer ── */
+.session-timer {
+  text-align: center; padding: 10px;
+  font-size: 32px; font-weight: 800; letter-spacing: -1px;
+  color: var(--green); font-variant-numeric: tabular-nums;
+}
+.session-timer.inactive { color: var(--dim); }
+
+/* ── Inline row ── */
+.row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: none; }
+.row-label { font-size: 14px; color: var(--muted); }
+.row-value { font-size: 14px; font-weight: 600; }
+
+/* ── Notes input ── */
+.note-input {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text); font-family: inherit;
+  font-size: 13px; padding: 10px 12px; outline: none; resize: none; height: 70px;
+  margin-top: 6px;
+}
+.note-input::placeholder { color: var(--dim); }
+
+/* ── Alert badge ── */
+.badge {
+  display: inline-block; background: var(--red); color: #fff;
+  border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700;
+  margin-left: 6px; vertical-align: middle;
+}
+
+/* ── Pulse animation ── */
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+.pulse-icon { display: inline-block; animation: pulse 1s ease-in-out infinite; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 1: DASHBOARD (live readings)
+  ═══════════════════════════════════════════ -->
+  <section class="screen active" id="screen-dash">
+
+    <div class="topbar">
+      <div class="wordmark">tiga</div>
+      <div class="conn-chip" onclick="tryConnect()">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span id="conn-label">Demo</span>
+      </div>
+    </div>
+
+    <!-- BLE connect -->
+    <div class="card" style="padding:12px 16px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <div style="font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Device</div>
+        <div style="font-size:13px; margin-top:2px;" id="ble-status-line">Not connected — tap to scan</div>
+      </div>
+      <button class="btn small outline" style="width:auto; white-space:nowrap;" onclick="tryConnect()" id="ble-btn">Connect</button>
+    </div>
+
+    <!-- Session timer -->
+    <div class="card" style="padding: 10px 16px; margin-bottom: 10px;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">Session</div>
+          <div class="session-timer inactive" id="session-timer">00:00:00</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn small outline" id="session-btn" onclick="toggleSession()">Start</button>
+          <button class="btn small secondary" onclick="resetSession()">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hero: HR -->
+    <div class="hero">
+      <div class="hero-left">
+        <div class="label">Heart Rate</div>
+        <div class="value" id="d-hr" style="color:var(--green)">--</div>
+        <div class="sub" id="d-hr-status">Place finger on sensor</div>
+      </div>
+      <div class="hero-right"><span class="pulse-icon" id="hr-pulse">♥</span></div>
+    </div>
+
+    <!-- SpO2 + Steps -->
+    <div class="metric-row">
+      <div class="metric green">
+        <div class="metric-label">SpO₂</div>
+        <div class="metric-value" id="d-spo2">--<span class="metric-unit">%</span></div>
+        <div class="metric-sub" id="d-spo2-sub">no reading</div>
+      </div>
+      <div class="metric blue">
+        <div class="metric-label">Steps</div>
+        <div class="metric-value" id="d-steps">0</div>
+        <div class="metric-sub" id="d-steps-sub">of 3000 goal</div>
+      </div>
+    </div>
+
+    <!-- Alt + Floors -->
+    <div class="metric-row">
+      <div class="metric purple">
+        <div class="metric-label">Altitude</div>
+        <div class="metric-value" id="d-alt">--<span class="metric-unit">m</span></div>
+        <div class="metric-sub" id="d-alt-sub">relative to start</div>
+      </div>
+      <div class="metric orange">
+        <div class="metric-label">Floors</div>
+        <div class="metric-value" id="d-floors">0</div>
+        <div class="metric-sub">climbed this session</div>
+      </div>
+    </div>
+
+    <!-- Battery + Pressure -->
+    <div class="metric-row">
+      <div class="metric" id="bat-metric">
+        <div class="metric-label">Battery</div>
+        <div class="metric-value" id="d-battery">--<span class="metric-unit">%</span></div>
+        <div class="metric-sub" id="d-bat-sub">–</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Pressure</div>
+        <div class="metric-value" id="d-pressure" style="font-size:20px;">--</div>
+        <div class="metric-sub">hPa</div>
+      </div>
+    </div>
+
+    <!-- Safety status -->
+    <div class="card">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; font-weight:600; margin-bottom:8px;">Safety & Wearing</div>
+      <div class="chips" id="d-chips">
+        <span class="chip" id="chip-worn"><span class="dot"></span>Not worn</span>
+        <span class="chip" id="chip-fall"><span class="dot"></span>No falls</span>
+        <span class="chip" id="chip-stable"><span class="dot"></span>Stable</span>
+        <span class="chip" id="chip-gps"><span class="dot"></span>GPS searching</span>
+      </div>
+    </div>
+
+    <!-- Steps progress -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Daily goal</span>
+        <span style="font-size:12px; color:var(--muted);" id="d-steps-pct">0%</span>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="steps-bar" style="width:0%"></div>
+      </div>
+    </div>
+
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 2: TESTS
+  ═══════════════════════════════════════════ -->
+  <section class="screen" id="screen-tests">
+
+    <div class="page-title">Field Tests</div>
+    <div class="page-sub" id="test-summary-line">0 passed · 0 failed · 10 pending</div>
+
+    <div class="section-label">Sensor accuracy</div>
+
+    <!-- T1: Resting HR -->
+    <div class="test-item" id="t-hr-rest">
+      <div class="test-status" id="ts-hr-rest">1</div>
+      <div class="test-body">
+        <div class="test-name">Resting heart rate</div>
+        <div class="test-desc">Sit still for 60s with finger on sensor. Expected: 50–80 bpm for a healthy adult at rest.</div>
+        <div class="test-result" id="tr-hr-rest"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="runTest('hr-rest')">Run 60s test</button>
+          <button class="btn small secondary" onclick="passTest('hr-rest')" id="tb-hr-rest-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('hr-rest','Out of range')" id="tb-hr-rest-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T2: Active HR -->
+    <div class="test-item" id="t-hr-active">
+      <div class="test-status" id="ts-hr-active">2</div>
+      <div class="test-body">
+        <div class="test-name">Active heart rate</div>
+        <div class="test-desc">Walk briskly for 2 min, then place finger on sensor. Expected: 80–120 bpm, higher than resting reading.</div>
+        <div class="test-result" id="tr-hr-active"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="runTest('hr-active')">Start 2min walk</button>
+          <button class="btn small secondary" onclick="passTest('hr-active')" id="tb-hr-active-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('hr-active','No change')" id="tb-hr-active-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T3: SpO2 -->
+    <div class="test-item" id="t-spo2">
+      <div class="test-status" id="ts-spo2">3</div>
+      <div class="test-body">
+        <div class="test-name">SpO₂ reading</div>
+        <div class="test-desc">Hold finger still on sensor for 10s. Expected: 95–100%. Below 90% = sensor issue or placement wrong.</div>
+        <div class="test-result" id="tr-spo2"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="runTest('spo2')">Run 10s test</button>
+          <button class="btn small secondary" onclick="passTest('spo2')" id="tb-spo2-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('spo2','Below 95%')" id="tb-spo2-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T4: Wearing detection -->
+    <div class="test-item" id="t-worn">
+      <div class="test-status" id="ts-worn">4</div>
+      <div class="test-body">
+        <div class="test-name">Wearing detection</div>
+        <div class="test-desc">Put device on wrist → dashboard should show "wearing". Remove it → should show "not worn" within 2s.</div>
+        <div class="test-result" id="tr-worn"></div>
+        <div class="test-actions">
+          <button class="btn small secondary" onclick="passTest('worn')" id="tb-worn-pass">Pass</button>
+          <button class="btn small secondary" onclick="failTest('worn','Not detecting')" id="tb-worn-fail">Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Motion & steps</div>
+
+    <!-- T5: Step count -->
+    <div class="test-item" id="t-steps">
+      <div class="test-status" id="ts-steps">5</div>
+      <div class="test-body">
+        <div class="test-name">Step counter accuracy</div>
+        <div class="test-desc">Count exactly 20 steps by hand while walking. Check device step count increased by 18–22. Acceptable error: ±10%.</div>
+        <div class="test-result" id="tr-steps"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="startStepTest()">Start (record baseline)</button>
+          <button class="btn small outline" onclick="endStepTest()">End (record count)</button>
+          <button class="btn small secondary" onclick="passTest('steps')" id="tb-steps-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('steps','Off by >10%')" id="tb-steps-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T6: Fall detection -->
+    <div class="test-item" id="t-fall">
+      <div class="test-status" id="ts-fall">6</div>
+      <div class="test-body">
+        <div class="test-name">Fall detection</div>
+        <div class="test-desc">Controlled test: hold device in hand and drop it firmly onto a cushion from ~50cm. Device should trigger fall confirm screen within 1s. Press BTN2 to dismiss.</div>
+        <div class="test-result" id="tr-fall"></div>
+        <div class="test-actions">
+          <button class="btn small secondary" onclick="passTest('fall')" id="tb-fall-pass">Pass — triggered</button>
+          <button class="btn small secondary" onclick="failTest('fall','Did not trigger')" id="tb-fall-fail">Fail — missed</button>
+          <button class="btn small secondary" onclick="noteTest('fall','False positive')" id="tb-fall-fp">False positive</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Altitude & environment</div>
+
+    <!-- T7: Altitude baseline -->
+    <div class="test-item" id="t-alt">
+      <div class="test-status" id="ts-alt">7</div>
+      <div class="test-body">
+        <div class="test-name">Altitude baseline & drift</div>
+        <div class="test-desc">Boot device and stay on same floor for 2 min. Altitude should read near 0m (±2m). Note any drift in the field.</div>
+        <div class="test-result" id="tr-alt"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="recordAlt()">Record current altitude</button>
+          <button class="btn small secondary" onclick="passTest('alt')" id="tb-alt-pass" disabled>Pass (≤2m drift)</button>
+          <button class="btn small secondary" onclick="failTest('alt','Drifting >5m')" id="tb-alt-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T8: Floor counting -->
+    <div class="test-item" id="t-floors">
+      <div class="test-status" id="ts-floors">8</div>
+      <div class="test-body">
+        <div class="test-name">Floor counting (staircase)</div>
+        <div class="test-desc">Climb exactly 1 floor of stairs (~3m). Floors counter on dashboard should increment by 1. Test with 2 floors if available.</div>
+        <div class="test-result" id="tr-floors"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="recordFloorBefore()">Record before climb</button>
+          <button class="btn small outline" onclick="recordFloorAfter()">Record after climb</button>
+          <button class="btn small secondary" onclick="passTest('floors')" id="tb-floors-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('floors','Did not count')" id="tb-floors-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Alerts</div>
+
+    <!-- T9: Buzzer + motor -->
+    <div class="test-item" id="t-alerts">
+      <div class="test-status" id="ts-alerts">9</div>
+      <div class="test-body">
+        <div class="test-name">Alert system (buzzer + motor)</div>
+        <div class="test-desc">Trigger each alert pattern from the device menu: reach step goal, fall confirm, SOS confirm. Verify buzzer plays correct melody and motor vibrates.</div>
+        <div class="test-result" id="tr-alerts"></div>
+        <textarea class="note-input" id="note-alerts" placeholder="Notes: which patterns worked, any issues..."></textarea>
+        <div class="test-actions">
+          <button class="btn small secondary" onclick="passTest('alerts')" id="tb-alerts-pass">Pass</button>
+          <button class="btn small secondary" onclick="failTest('alerts','Silent')" id="tb-alerts-fail">Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- T10: GPS -->
+    <div class="test-item" id="t-gps">
+      <div class="test-status" id="ts-gps">10</div>
+      <div class="test-body">
+        <div class="test-name">GPS fix time (outdoor)</div>
+        <div class="test-desc">Take device outside with clear sky. Record time from boot to first GPS fix. Expected: under 60s cold start, under 15s warm start.</div>
+        <div class="test-result" id="tr-gps"></div>
+        <div class="test-actions">
+          <button class="btn small outline" onclick="startGPSTimer()">Start timer</button>
+          <button class="btn small outline" onclick="stopGPSTimer()">Fix acquired</button>
+          <button class="btn small secondary" onclick="passTest('gps')" id="tb-gps-pass" disabled>Pass</button>
+          <button class="btn small secondary" onclick="failTest('gps','No fix >2min')" id="tb-gps-fail" disabled>Fail</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:12px;"></div>
+    <button class="btn secondary" onclick="exportTestReport()">Export test report</button>
+
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 3: LOG (Serial paste + parse)
+  ═══════════════════════════════════════════ -->
+  <section class="screen" id="screen-log">
+
+    <div class="page-title">Serial Log</div>
+    <div class="page-sub">Paste Serial Monitor output here to extract real readings.</div>
+
+    <div class="section-label">Paste output from Arduino Serial Monitor</div>
+    <textarea class="log-box" id="log-input"
+      placeholder="Paste your Serial Monitor output here...&#10;&#10;Example lines the parser looks for:&#10;[MAX] HR=72 bpm  SpO2=97%  valid=1  R=0.523&#10;[BMP] Pressure: 1013.2 hPa  Altitude: 1.2 m  Floors: 0&#10;[TIGA] Sensors: MPU=OK  MAX=OK  BMP=OK"></textarea>
+
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button class="btn small outline" style="flex:1" onclick="parseLog()">Parse log</button>
+      <button class="btn small secondary" style="flex:1" onclick="clearLog()">Clear</button>
+    </div>
+
+    <div class="section-label">Parsed readings</div>
+    <div class="log-output" id="log-output">No log parsed yet. Paste Serial output above and tap Parse.</div>
+
+    <div class="section-label">Sensor status from log</div>
+    <div class="card" id="log-sensor-status">
+      <div class="row">
+        <span class="row-label">MPU6050</span>
+        <span class="row-value" id="ls-mpu" style="color:var(--dim)">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">MAX30102</span>
+        <span class="row-value" id="ls-max" style="color:var(--dim)">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">BMP280</span>
+        <span class="row-value" id="ls-bmp" style="color:var(--dim)">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">GPS</span>
+        <span class="row-value" id="ls-gps" style="color:var(--dim)">—</span>
+      </div>
+    </div>
+
+    <div class="section-label">Extracted values (last seen)</div>
+    <div class="card">
+      <div class="row"><span class="row-label">Heart rate</span><span class="row-value" id="lv-hr">—</span></div>
+      <div class="row"><span class="row-label">SpO₂</span><span class="row-value" id="lv-spo2">—</span></div>
+      <div class="row"><span class="row-label">SpO₂ R-value</span><span class="row-value" id="lv-r">—</span></div>
+      <div class="row"><span class="row-label">Pressure</span><span class="row-value" id="lv-pressure">—</span></div>
+      <div class="row"><span class="row-label">Altitude</span><span class="row-value" id="lv-alt">—</span></div>
+      <div class="row"><span class="row-label">Floors</span><span class="row-value" id="lv-floors">—</span></div>
+      <div class="row"><span class="row-label">GPS satellites</span><span class="row-value" id="lv-sats">—</span></div>
+      <div class="row"><span class="row-label">MPU reconnects</span><span class="row-value" id="lv-mpurecon">—</span></div>
+    </div>
+
+    <div class="section-label">Issues found in log</div>
+    <div id="log-issues" style="font-size:13px; color:var(--muted);">None yet.</div>
+
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 4: NOTES & REPORT
+  ═══════════════════════════════════════════ -->
+  <section class="screen" id="screen-notes">
+
+    <div class="page-title">Session Notes</div>
+    <div class="page-sub">Record observations during the field test.</div>
+
+    <div class="section-label">Test session info</div>
+    <div class="card">
+      <div class="row"><span class="row-label">Date</span><span class="row-value" id="note-date">—</span></div>
+      <div class="row"><span class="row-label">Session duration</span><span class="row-value" id="note-duration">—</span></div>
+      <div class="row"><span class="row-label">Tests passed</span><span class="row-value" id="note-passed" style="color:var(--green)">0 / 10</span></div>
+      <div class="row"><span class="row-label">Firmware</span><span class="row-value">v6a</span></div>
+      <div class="row"><span class="row-label">Hardware</span><span class="row-value">Proto 3</span></div>
+    </div>
+
+    <div class="section-label">General observations</div>
+    <textarea class="note-input" id="note-general" style="height:90px;"
+      placeholder="How did the test go overall? Any surprises, hardware issues, comfort observations..."></textarea>
+
+    <div class="section-label">HR sensor performance</div>
+    <textarea class="note-input" id="note-hr"
+      placeholder="How quickly did HR lock? Did it track movement changes? Any dropouts?"></textarea>
+
+    <div class="section-label">Step counter</div>
+    <textarea class="note-input" id="note-steps"
+      placeholder="Accuracy over 20 steps? Any false counts when sitting? Motion sensitivity feel?"></textarea>
+
+    <div class="section-label">Fall detection</div>
+    <textarea class="note-input" id="note-fall"
+      placeholder="Did it trigger correctly? Any false positives during normal movement?"></textarea>
+
+    <div class="section-label">Comfort & wearability</div>
+    <textarea class="note-input" id="note-comfort"
+      placeholder="Breadboard form factor — too bulky? Wires snagging? Sensor placement issues?"></textarea>
+
+    <div class="section-label">Issues to fix before Agnes wears it</div>
+    <textarea class="note-input" id="note-issues" style="height:90px;"
+      placeholder="List anything that must be resolved before handing to Agnes for testing..."></textarea>
+
+    <div class="divider"></div>
+    <button class="btn" onclick="exportFullReport()">Export full report</button>
+    <button class="btn secondary" onclick="clearNotes()">Clear all notes</button>
+
+  </section>
+
+  <!-- Bottom nav -->
+  <nav>
+    <button class="active" data-s="dash" onclick="showScreen('dash')">
+      <span class="ic">◉</span>Live
+    </button>
+    <button data-s="tests" onclick="showScreen('tests')">
+      <span class="ic">✓</span>Tests<span class="badge" id="badge-fail" style="display:none">0</span>
+    </button>
+    <button data-s="log" onclick="showScreen('log')">
+      <span class="ic">⌨</span>Log
+    </button>
+    <button data-s="notes" onclick="showScreen('notes')">
+      <span class="ic">✎</span>Notes
+    </button>
+  </nav>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  mode: 'demo',        // 'demo' | 'live'
+  sessionActive: false,
+  sessionStart:  0,
+  sessionMs:     0,
+  data: {
+    hr: 0, hrStatus: 'Place finger on sensor',
+    spo2: 0, spo2Valid: false,
+    steps: 0, stepsGoal: 3000,
+    altM: 0, floors: 0,
+    battery: 0, pressure: 0,
+    worn: false, falls: 0,
+    stable: true, gpsFix: false, gpsSats: 0,
+  },
+  tests: {},   // id → { status:'pending'|'pass'|'fail'|'note', result:'', note:'' }
+  stepBaseline: 0,
+  floorBefore: 0,
+  gpsTimerStart: 0,
+  gpsTimerRunning: false,
+  demoInterval: null,
+  timerInterval: null,
+};
+
+const TEST_IDS = ['hr-rest','hr-active','spo2','worn','steps','fall','alt','floors','alerts','gps'];
+TEST_IDS.forEach(id => { S.tests[id] = { status: 'pending', result: '', note: '' }; });
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.s === name);
+  });
+  if (name === 'notes') refreshNotesPanel();
+}
+
+// ============================================================
+// SESSION TIMER
+// ============================================================
+function toggleSession() {
+  if (!S.sessionActive) {
+    S.sessionActive = true;
+    S.sessionStart  = Date.now() - S.sessionMs;
+    document.getElementById('session-btn').textContent = 'Pause';
+    document.getElementById('session-timer').classList.remove('inactive');
+    S.timerInterval = setInterval(tickTimer, 500);
+    if (S.mode === 'demo') startDemo();
+    toast('Session started');
+  } else {
+    S.sessionActive = false;
+    S.sessionMs = Date.now() - S.sessionStart;
+    document.getElementById('session-btn').textContent = 'Resume';
+    clearInterval(S.timerInterval);
+    if (S.demoInterval) { clearInterval(S.demoInterval); S.demoInterval = null; }
+    toast('Session paused');
+  }
+}
+
+function resetSession() {
+  if (!confirm('Reset session? All counters will clear.')) return;
+  S.sessionActive = false;
+  S.sessionMs     = 0;
+  S.data.steps    = 0;
+  S.data.floors   = 0;
+  S.data.falls    = 0;
+  S.data.altM     = 0;
+  clearInterval(S.timerInterval);
+  clearInterval(S.demoInterval);
+  S.demoInterval = null;
+  document.getElementById('session-btn').textContent = 'Start';
+  document.getElementById('session-timer').classList.add('inactive');
+  document.getElementById('session-timer').textContent = '00:00:00';
+  updateDash();
+  toast('Session reset');
+}
+
+function tickTimer() {
+  const ms   = S.sessionActive ? Date.now() - S.sessionStart : S.sessionMs;
+  const s    = Math.floor(ms / 1000);
+  const h    = Math.floor(s / 3600);
+  const m    = Math.floor((s % 3600) / 60);
+  const sec  = s % 60;
+  document.getElementById('session-timer').textContent =
+    String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+}
+
+// ============================================================
+// DEMO DATA GENERATOR
+// ============================================================
+function startDemo() {
+  if (S.demoInterval) return;
+  S.data.hr       = 68;
+  S.data.spo2     = 97;
+  S.data.spo2Valid= true;
+  S.data.battery  = 88;
+  S.data.pressure = 1013.2;
+  S.data.worn     = true;
+  S.data.stable   = true;
+  S.demoInterval = setInterval(demoTick, 2000);
+  updateDash();
+}
+
+function demoTick() {
+  const d = S.data;
+  d.hr     = Math.max(55, Math.min(95, Math.round(d.hr + (Math.random()-0.5)*5)));
+  d.spo2   = 95 + Math.floor(Math.random()*5);
+  d.steps += Math.floor(Math.random()*4);
+  if (Math.random() < 0.02) d.battery = Math.max(0, d.battery - 1);
+  d.pressure = 1013.2 + (Math.random()-0.5)*0.5;
+  // Demo: mild altitude drift
+  d.altM = parseFloat((d.altM + (Math.random()-0.5)*0.3).toFixed(1));
+  updateDash();
+}
+
+// ============================================================
+// DASHBOARD UPDATE
+// ============================================================
+function updateDash() {
+  const d = S.data;
+
+  // HR
+  const hrEl = document.getElementById('d-hr');
+  hrEl.textContent = d.hr > 0 ? d.hr : '--';
+  hrEl.style.color = d.hr === 0 ? 'var(--dim)' :
+                     d.hr < 45 || d.hr > 110 ? 'var(--red)' :
+                     d.hr < 50 || d.hr > 100 ? 'var(--orange)' : 'var(--green)';
+
+  document.getElementById('d-hr-status').textContent =
+    d.hr === 0    ? 'Place finger on sensor' :
+    d.hr < 45     ? 'Very low — please rest' :
+    d.hr < 50     ? 'A little low' :
+    d.hr <= 100   ? 'Heart is steady' :
+    d.hr <= 110   ? 'Beating a bit fast' : 'Too fast — please rest';
+
+  // SpO2
+  const spo2El = document.getElementById('d-spo2');
+  spo2El.innerHTML = d.spo2Valid ? d.spo2 + '<span class="metric-unit">%</span>' : '--<span class="metric-unit">%</span>';
+  spo2El.style.color = !d.spo2Valid ? 'var(--dim)' :
+                        d.spo2 >= 95 ? 'var(--green)' :
+                        d.spo2 >= 90 ? 'var(--orange)' : 'var(--red)';
+  document.getElementById('d-spo2-sub').textContent = d.spo2Valid ? (d.spo2 >= 95 ? 'normal range' : 'low — recheck') : 'no reading';
+
+  // Steps
+  document.getElementById('d-steps').textContent = d.steps.toLocaleString();
+  const pct = Math.min(100, Math.round(d.steps / d.stepsGoal * 100));
+  document.getElementById('d-steps-sub').textContent = 'of ' + d.stepsGoal.toLocaleString() + ' goal';
+  document.getElementById('d-steps-pct').textContent = pct + '%';
+  document.getElementById('steps-bar').style.width = pct + '%';
+  document.getElementById('steps-bar').style.background =
+    pct >= 100 ? 'var(--green)' : pct >= 50 ? 'var(--blue)' : 'var(--muted)';
+
+  // Altitude
+  document.getElementById('d-alt').innerHTML = d.altM.toFixed(1) + '<span class="metric-unit">m</span>';
+  document.getElementById('d-alt-sub').textContent = d.altM === 0 ? 'at start level' :
+    d.altM > 0 ? 'above start' : 'below start';
+
+  // Floors
+  document.getElementById('d-floors').textContent = d.floors;
+
+  // Battery
+  const batEl = document.getElementById('d-battery');
+  batEl.innerHTML = d.battery > 0 ? d.battery + '<span class="metric-unit">%</span>' : '--<span class="metric-unit">%</span>';
+  document.getElementById('bat-metric').className = 'metric' + (d.battery < 20 && d.battery > 0 ? ' orange' : '');
+  document.getElementById('d-bat-sub').textContent = d.battery > 0 ? '~' + Math.round(d.battery * 0.2) + 'h left' : '–';
+
+  // Pressure
+  document.getElementById('d-pressure').textContent = d.pressure > 0 ? d.pressure.toFixed(1) : '--';
+
+  // Chips
+  setChip('chip-worn',   d.worn   ? 'ok' : 'warn', d.worn   ? 'Worn correctly' : 'Not worn');
+  setChip('chip-fall',   d.falls  ? 'bad' : 'ok',  d.falls  ? d.falls + ' fall(s)!' : 'No falls');
+  setChip('chip-stable', d.stable ? 'ok' : 'warn', d.stable ? 'Stable' : 'Unstable');
+  setChip('chip-gps',    d.gpsFix ? 'ok' : 'info', d.gpsFix ? 'GPS fix (' + d.gpsSats + ' sats)' : 'GPS searching');
+
+  // HR pulse animation — faster when higher HR
+  const pulse = document.getElementById('hr-pulse');
+  if (d.hr > 0) {
+    const dur = Math.max(0.4, 1.5 - (d.hr - 60) * 0.008);
+    pulse.style.animationDuration = dur + 's';
+  }
+}
+
+function setChip(id, cls, text) {
+  const el = document.getElementById(id);
+  el.className = 'chip ' + cls;
+  el.innerHTML = '<span class="dot"></span>' + text;
+}
+
+// ============================================================
+// BLE CONNECTION
+// Service:  4fafc201-1fb5-459e-8fcc-c5c9c331914b
+// Char:     beb5483e-36e1-4688-b7f5-ea07361b26a8
+// Packet:   20 bytes — see tiga_ble.h for format
+// ============================================================
+const BLE_SERVICE  = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const BLE_DATA     = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+let bleDevice = null;
+let bleServer = null;
+
+async function tryConnect() {
+  if (!navigator.bluetooth) {
+    toast('Web Bluetooth not available.\niOS: use Bluefy app. Android/Desktop: use Chrome.');
+    return;
+  }
+
+  // If already connected — disconnect
+  if (S.mode === 'live' && bleDevice && bleDevice.gatt.connected) {
+    bleDevice.gatt.disconnect();
+    S.mode = 'demo';
+    setConnStatus('demo');
+    toast('Disconnected from device');
+    if (S.demoInterval) { clearInterval(S.demoInterval); S.demoInterval = null; }
+    return;
+  }
+
+  try {
+    setConnStatus('scanning');
+    toast('Scanning for TIGA-1…');
+
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [
+        { name: 'TIGA-1' },
+        { services: [BLE_SERVICE] }
+      ],
+      optionalServices: [BLE_SERVICE]
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onBLEDisconnect);
+
+    toast('Connecting…');
+    bleServer = await bleDevice.gatt.connect();
+
+    const service = await bleServer.getPrimaryService(BLE_SERVICE);
+    const dataChar = await service.getCharacteristic(BLE_DATA);
+
+    // Subscribe to notifications
+    await dataChar.startNotifications();
+    dataChar.addEventListener('characteristicvaluechanged', onBLEData);
+
+    S.mode = 'live';
+    // Stop demo if running
+    if (S.demoInterval) { clearInterval(S.demoInterval); S.demoInterval = null; }
+    setConnStatus('live');
+    toast('Connected to ' + bleDevice.name + ' ✓');
+
+  } catch (e) {
+    setConnStatus('demo');
+    if (e.name === 'NotFoundError') {
+      toast('No TIGA device found. Is firmware flashed and device on?');
+    } else if (e.name === 'SecurityError') {
+      toast('BLE requires HTTPS. Make sure you\'re on christinepamela.com');
+    } else {
+      toast('Connection failed: ' + e.message);
+    }
+    console.error('[BLE]', e);
+  }
+}
+
+function onBLEDisconnect() {
+  S.mode = 'demo';
+  setConnStatus('demo');
+  toast('Device disconnected');
+  // Attempt auto-reconnect after 3s
+  setTimeout(() => {
+    if (bleDevice && !bleDevice.gatt.connected) {
+      toast('Reconnecting…');
+      bleDevice.gatt.connect().catch(() => toast('Reconnect failed — tap to retry'));
+    }
+  }, 3000);
+}
+
+function onBLEData(event) {
+  // Parse 20-byte packet — see tiga_ble.h for format
+  const v   = event.target.value;  // DataView
+  const get8  = (i)    => v.getUint8(i);
+  const get16 = (i)    => v.getUint16(i, true);   // little-endian
+  const get16s = (i)   => v.getInt16(i, true);     // signed little-endian
+
+  const d = S.data;
+
+  d.hr         = get8(0);
+  d.spo2       = get8(1);
+  d.spo2Valid  = get8(2) === 1;
+  d.steps      = get16(3);
+  d.altM       = get16s(5) / 10.0;
+  d.floors     = get8(7);
+  d.battery    = get8(8);
+  d.worn       = get8(9) === 1;
+  d.falls      = get8(10);
+  d.stable     = get8(11) === 1;
+  d.gpsFix     = get8(12) === 1;
+  d.gpsSats    = get8(13);
+  d.pressure   = get16(14) / 10.0;
+
+  updateDash();
+}
+
+function setConnStatus(status) {
+  const dot    = document.getElementById('conn-dot');
+  const label  = document.getElementById('conn-label');
+  const line   = document.getElementById('ble-status-line');
+  const btn    = document.getElementById('ble-btn');
+
+  if (status === 'live') {
+    dot.className    = 'conn-dot ok';
+    label.textContent = 'Live ●';
+    if (line) line.textContent = 'Connected to ' + (bleDevice?.name || 'TIGA-1');
+    if (line) line.style.color  = 'var(--green)';
+    if (btn)  btn.textContent   = 'Disconnect';
+  } else if (status === 'scanning') {
+    dot.className    = 'conn-dot demo';
+    label.textContent = 'Scanning…';
+    if (line) line.textContent = 'Scanning for TIGA-1…';
+    if (line) line.style.color  = 'var(--orange)';
+    if (btn)  btn.textContent   = 'Cancel';
+  } else {
+    dot.className    = 'conn-dot';
+    label.textContent = 'Demo';
+    if (line) line.textContent = 'Not connected — tap to scan';
+    if (line) line.style.color  = '';
+    if (btn)  btn.textContent   = 'Connect';
+  }
+}
+
+// ============================================================
+// TEST RUNNER
+// ============================================================
+let testTimers = {};
+
+function runTest(id) {
+  setTestStatus(id, 'run');
+  setTestResult(id, 'Running…', '');
+
+  const durations = { 'hr-rest': 60, 'hr-active': 120, 'spo2': 10 };
+  const dur = durations[id] || 10;
+
+  let remaining = dur;
+  setTestResult(id, remaining + 's remaining…', '');
+
+  if (testTimers[id]) clearInterval(testTimers[id]);
+  testTimers[id] = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      setTestResult(id, remaining + 's remaining…', '');
+    } else {
+      clearInterval(testTimers[id]);
+      // Snapshot current value
+      const snap = snapshotForTest(id);
+      setTestResult(id, snap.text, snap.ok ? '' : 'warn');
+      enablePassFail(id);
+    }
+  }, 1000);
+}
+
+function snapshotForTest(id) {
+  const d = S.data;
+  if (id === 'hr-rest') {
+    if (d.hr === 0) return { text: 'No HR reading — finger not on sensor', ok: false };
+    const ok = d.hr >= 50 && d.hr <= 80;
+    return { text: 'Measured: ' + d.hr + ' bpm ' + (ok ? '✓ in range' : '⚠ out of expected range'), ok };
+  }
+  if (id === 'hr-active') {
+    if (d.hr === 0) return { text: 'No HR reading', ok: false };
+    return { text: 'Measured: ' + d.hr + ' bpm — was it higher than resting?', ok: d.hr > 70 };
+  }
+  if (id === 'spo2') {
+    if (!d.spo2Valid) return { text: 'No SpO2 reading — hold finger still', ok: false };
+    const ok = d.spo2 >= 95;
+    return { text: 'SpO2: ' + d.spo2 + '% ' + (ok ? '✓ normal' : '⚠ below 95%'), ok };
+  }
+  return { text: 'Check device readings', ok: true };
+}
+
+function startStepTest() {
+  S.stepBaseline = S.data.steps;
+  setTestStatus('steps', 'run');
+  setTestResult('steps', 'Baseline recorded: ' + S.stepBaseline + ' steps. Now walk 20 steps.', '');
+  toast('Baseline: ' + S.stepBaseline + ' steps. Walk 20 steps, then tap End.');
+}
+
+function endStepTest() {
+  const delta = S.data.steps - S.stepBaseline;
+  const ok    = delta >= 18 && delta <= 22;
+  const pct   = S.stepBaseline > 0 || delta > 0 ?
+    Math.abs(delta - 20) / 20 * 100 : 100;
+  setTestResult('steps',
+    'Counted ' + delta + ' steps for 20 walked. Error: ' + pct.toFixed(0) + '%' +
+    (ok ? ' ✓' : ' ⚠ outside ±10%'), ok ? '' : 'warn');
+  enablePassFail('steps');
+}
+
+function recordAlt() {
+  const a = S.data.altM;
+  setTestResult('alt', 'Current altitude: ' + a.toFixed(1) + 'm. ' +
+    (Math.abs(a) <= 2 ? '✓ within 2m of baseline' : '⚠ drifting — note value'), '');
+  enablePassFail('alt');
+  toast('Altitude recorded: ' + a.toFixed(1) + 'm');
+}
+
+function recordFloorBefore() {
+  S.floorBefore = S.data.floors;
+  setTestResult('floors', 'Floors before: ' + S.floorBefore + '. Now climb 1 floor.', '');
+  toast('Recorded: ' + S.floorBefore + ' floors. Climb a floor then tap Record after.');
+}
+
+function recordFloorAfter() {
+  const delta = S.data.floors - S.floorBefore;
+  const ok    = delta >= 1;
+  setTestResult('floors',
+    'Floor delta: ' + delta + (ok ? ' ✓ counted correctly' : ' ⚠ did not increment'), ok ? '' : 'warn');
+  enablePassFail('floors');
+}
+
+let gpsStart = 0;
+function startGPSTimer() {
+  gpsStart = Date.now();
+  setTestStatus('gps', 'run');
+  setTestResult('gps', 'Timer running — waiting for GPS fix…', '');
+  toast('GPS timer started. Tap Fix acquired when device shows fix.');
+}
+
+function stopGPSTimer() {
+  if (!gpsStart) { toast('Tap Start timer first'); return; }
+  const sec = Math.round((Date.now() - gpsStart) / 1000);
+  const ok  = sec <= 120;
+  setTestResult('gps',
+    'Fix time: ' + sec + 's ' + (ok ? (sec < 15 ? '✓ warm start' : '✓ within spec') : '⚠ slow >2min'), ok ? '' : 'warn');
+  enablePassFail('gps');
+  gpsStart = 0;
+}
+
+function noteTest(id, note) {
+  S.tests[id].note = note;
+  setTestResult(id, 'Noted: ' + note, 'warn');
+  setTestStatus(id, 'note');
+  updateTestSummary();
+}
+
+function passTest(id) {
+  const curr = document.getElementById('tr-' + id).textContent;
+  S.tests[id] = { status: 'pass', result: curr || 'Passed', note: '' };
+  setTestStatus(id, 'pass');
+  if (!document.getElementById('tr-' + id).textContent) {
+    setTestResult(id, 'Passed ✓', '');
+  }
+  updateTestSummary();
+  toast('Test passed ✓');
+}
+
+function failTest(id, reason) {
+  S.tests[id] = { status: 'fail', result: reason, note: '' };
+  setTestStatus(id, 'fail');
+  setTestResult(id, 'Failed: ' + reason, 'bad');
+  updateTestSummary();
+  toast('Test marked failed');
+}
+
+function enablePassFail(id) {
+  const p = document.getElementById('tb-' + id + '-pass');
+  const f = document.getElementById('tb-' + id + '-fail');
+  if (p) p.disabled = false;
+  if (f) f.disabled = false;
+}
+
+function setTestStatus(id, status) {
+  S.tests[id].status = status;
+  const el = document.getElementById('ts-' + id);
+  el.className = 'test-status ' + (status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : status === 'run' ? 'run' : status === 'note' ? 'skip' : '');
+  el.textContent = status === 'pass' ? '✓' : status === 'fail' ? '✗' : status === 'run' ? '…' : status === 'note' ? '!' : el.textContent;
+}
+
+function setTestResult(id, text, cls) {
+  const el = document.getElementById('tr-' + id);
+  el.textContent  = text;
+  el.className    = 'test-result' + (cls ? ' ' + cls : '');
+}
+
+function updateTestSummary() {
+  let pass = 0, fail = 0, pend = 0;
+  TEST_IDS.forEach(id => {
+    const s = S.tests[id].status;
+    if (s === 'pass') pass++;
+    else if (s === 'fail') fail++;
+    else pend++;
+  });
+  document.getElementById('test-summary-line').textContent =
+    pass + ' passed · ' + fail + ' failed · ' + pend + ' pending';
+  const badge = document.getElementById('badge-fail');
+  if (fail > 0) { badge.style.display = 'inline'; badge.textContent = fail; }
+  else badge.style.display = 'none';
+}
+
+// ============================================================
+// SERIAL LOG PARSER
+// ============================================================
+function parseLog() {
+  const raw = document.getElementById('log-input').value;
+  if (!raw.trim()) { toast('Paste Serial output first'); return; }
+
+  const lines  = raw.split('\n');
+  const out    = [];
+  const issues = [];
+  let lastHR = null, lastSpo2 = null, lastR = null;
+  let lastAlt = null, lastFloors = null, lastPressure = null;
+  let lastSats = null, mpuRecon = null;
+  let mpuStatus = null, maxStatus = null, bmpStatus = null;
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+
+    // Sensor init line
+    if (line.includes('Sensors: MPU=')) {
+      const mpu = /MPU=(\w+)/.exec(line)?.[1];
+      const max = /MAX=(\w+)/.exec(line)?.[1];
+      const bmp = /BMP=(\w+)/.exec(line)?.[1];
+      if (mpu) mpuStatus = mpu;
+      if (max) maxStatus = max;
+      if (bmp) bmpStatus = bmp;
+      out.push({ cls: 'line-max', text: '✓ Boot: MPU=' + mpu + ' MAX=' + max + ' BMP=' + bmp });
+      if (mpu === 'FAIL') issues.push('MPU6050 failed to init — check SDA/SCL wiring');
+      if (max === 'FAIL') issues.push('MAX30102 failed to init — check 0x57 address, try 0x56');
+      if (bmp === 'FAIL') issues.push('BMP280 failed to init — check 0x76, try 0x77');
+    }
+
+    // MAX30102 line
+    else if (line.startsWith('[MAX]')) {
+      const hr   = /HR=([\d.]+)/.exec(line)?.[1];
+      const spo2 = /SpO2=(\d+)/.exec(line)?.[1];
+      const valid= /valid=(\d)/.exec(line)?.[1];
+      const r    = /R=([\d.]+)/.exec(line)?.[1];
+      if (hr)   lastHR   = parseFloat(hr);
+      if (spo2) lastSpo2 = parseInt(spo2);
+      if (r)    lastR    = parseFloat(r);
+      const flag = valid === '0' ? ' [no valid SpO2]' : '';
+      out.push({ cls: 'line-max', text: '♥ HR=' + hr + 'bpm  SpO2=' + spo2 + '%  R=' + r + flag });
+      if (spo2 && parseInt(spo2) < 90 && valid === '1') issues.push('SpO2 reading below 90% — check sensor placement');
+      if (r && (parseFloat(r) < 0.3 || parseFloat(r) > 1.5)) issues.push('SpO2 R-value out of expected range (0.4–1.2): ' + r + ' — sensor may not be seated correctly');
+    }
+
+    // BMP280 line
+    else if (line.startsWith('[BMP]')) {
+      const p   = /Pressure: ([\d.]+)/.exec(line)?.[1];
+      const alt = /Altitude: ([-\d.]+)/.exec(line)?.[1];
+      const fl  = /Floors: (\d+)/.exec(line)?.[1];
+      if (p)   lastPressure = parseFloat(p);
+      if (alt) lastAlt      = parseFloat(alt);
+      if (fl)  lastFloors   = parseInt(fl);
+      const floorStr = fl && fl !== '0' ? '  Floors=' + fl : '';
+      out.push({ cls: 'line-bmp', text: '⛰ ' + p + 'hPa  Alt=' + alt + 'm' + floorStr });
+      if (alt && Math.abs(parseFloat(alt)) > 50) issues.push('Altitude reading seems high: ' + alt + 'm — pressure baseline may not be set');
+    }
+
+    // GPS line
+    else if (line.startsWith('[GPS]')) {
+      const sats = /sats: (\d+)/.exec(line)?.[1];
+      const fix  = line.includes('Fix:');
+      if (sats) lastSats = parseInt(sats);
+      out.push({ cls: '', text: '🛰 ' + (fix ? '✓ Fix' : 'Searching') + (sats ? ' (' + sats + ' sats)' : '') });
+    }
+
+    // MPU reconnect
+    else if (line.includes('MPU recovered')) {
+      const n = /#(\d+)/.exec(line)?.[1];
+      mpuRecon = n;
+      out.push({ cls: 'line-warn', text: '⚠ MPU recovered #' + n + ' — loose wiring?' });
+      issues.push('MPU6050 disconnected and recovered (count: ' + n + ') — check SDA/SCL breadboard connections');
+    }
+
+    // Fall
+    else if (line.includes('FALL_CONFIRM') || line.includes('STATE_FALL')) {
+      out.push({ cls: 'line-warn', text: '⚠ Fall detect triggered' });
+    }
+
+    // I2C stuck
+    else if (line.includes('I2C SDA stuck')) {
+      out.push({ cls: 'line-err', text: '✗ I2C bus stuck at boot — recovered' });
+      issues.push('I2C bus was stuck at boot — check breadboard wiring around SDA (GPIO18)');
+    }
+
+    // Altitude baseline
+    else if (line.includes('Altitude baseline set')) {
+      const a = /([-\d.]+) m/.exec(line)?.[1];
+      out.push({ cls: 'line-bmp', text: '⛰ Altitude baseline set: ' + a + 'm (absolute)' });
+    }
+
+    // Floor climbed
+    else if (line.includes('Floor climbed')) {
+      out.push({ cls: 'line-bmp', text: '⛰ Floor climbed! ' + line.split('!')[1] });
+    }
+
+    // General TIGA lines
+    else if (line.startsWith('[TIGA]')) {
+      out.push({ cls: '', text: line });
+    }
+  });
+
+  // Render output
+  const outEl = document.getElementById('log-output');
+  if (out.length === 0) {
+    outEl.innerHTML = '<span style="color:var(--orange)">No recognised lines found. Make sure to copy the full Serial Monitor output starting from boot.</span>';
+  } else {
+    outEl.innerHTML = out.map(l =>
+      '<div class="' + l.cls + '">' + escHtml(l.text) + '</div>'
+    ).join('');
+    outEl.scrollTop = outEl.scrollHeight;
+  }
+
+  // Update sensor status
+  const statusColor = v => v === 'OK' ? 'var(--green)' : v === 'FAIL' ? 'var(--red)' : 'var(--dim)';
+  document.getElementById('ls-mpu').textContent  = mpuStatus || '—';
+  document.getElementById('ls-mpu').style.color  = statusColor(mpuStatus);
+  document.getElementById('ls-max').textContent  = maxStatus || '—';
+  document.getElementById('ls-max').style.color  = statusColor(maxStatus);
+  document.getElementById('ls-bmp').textContent  = bmpStatus || '—';
+  document.getElementById('ls-bmp').style.color  = statusColor(bmpStatus);
+
+  const gpsSeen = lastSats !== null;
+  document.getElementById('ls-gps').textContent = gpsSeen ? (S.data.gpsFix ? 'Fix' : 'Searching (' + lastSats + ' sats)') : '—';
+  document.getElementById('ls-gps').style.color = gpsSeen ? 'var(--blue)' : 'var(--dim)';
+
+  // Update extracted values
+  const setVal = (id, v, unit='') => {
+    document.getElementById(id).textContent = v !== null ? v + unit : '—';
+    document.getElementById(id).style.color = v !== null ? 'var(--text)' : 'var(--dim)';
+  };
+  setVal('lv-hr',       lastHR,       ' bpm');
+  setVal('lv-spo2',     lastSpo2,     '%');
+  setVal('lv-r',        lastR,        '');
+  setVal('lv-pressure', lastPressure, ' hPa');
+  setVal('lv-alt',      lastAlt,      ' m');
+  setVal('lv-floors',   lastFloors,   '');
+  setVal('lv-sats',     lastSats,     '');
+  setVal('lv-mpurecon', mpuRecon,     '');
+
+  // Push parsed values to dashboard
+  if (lastHR)       { S.data.hr = lastHR; }
+  if (lastSpo2)     { S.data.spo2 = lastSpo2; S.data.spo2Valid = true; }
+  if (lastAlt !== null)   { S.data.altM = lastAlt; }
+  if (lastFloors !== null){ S.data.floors = lastFloors; }
+  if (lastPressure) { S.data.pressure = lastPressure; }
+  if (lastSats !== null)  { S.data.gpsSats = lastSats; }
+  updateDash();
+
+  // Issues
+  const issuesEl = document.getElementById('log-issues');
+  if (issues.length === 0) {
+    issuesEl.textContent = 'None — log looks clean.';
+    issuesEl.style.color = 'var(--green)';
+  } else {
+    issuesEl.style.color = '';
+    issuesEl.innerHTML = issues.map((iss, i) =>
+      '<div style="margin-bottom:8px; padding:10px; background:var(--surface); border:1px solid var(--orange-dim); border-radius:var(--r-sm); color:var(--orange);">' +
+      (i+1) + '. ' + escHtml(iss) + '</div>'
+    ).join('');
+  }
+
+  toast('Parsed ' + out.length + ' lines · ' + issues.length + ' issue(s) found');
+}
+
+function clearLog() {
+  document.getElementById('log-input').value = '';
+  document.getElementById('log-output').textContent = 'No log parsed yet.';
+  document.getElementById('log-issues').textContent = 'None yet.';
+  document.getElementById('log-issues').style.color = '';
+  ['ls-mpu','ls-max','ls-bmp','ls-gps'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+    document.getElementById(id).style.color = 'var(--dim)';
+  });
+  ['lv-hr','lv-spo2','lv-r','lv-pressure','lv-alt','lv-floors','lv-sats','lv-mpurecon'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+    document.getElementById(id).style.color = 'var(--dim)';
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============================================================
+// NOTES & REPORT
+// ============================================================
+function refreshNotesPanel() {
+  const now = new Date();
+  document.getElementById('note-date').textContent =
+    now.toLocaleDateString('en-MY', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+  const ms  = S.sessionActive ? Date.now() - S.sessionStart : S.sessionMs;
+  const s   = Math.floor(ms / 1000);
+  const m   = Math.floor(s / 60);
+  document.getElementById('note-duration').textContent = m > 0 ? m + ' min ' + (s % 60) + ' sec' : s + ' sec';
+
+  let pass = 0;
+  TEST_IDS.forEach(id => { if (S.tests[id].status === 'pass') pass++; });
+  document.getElementById('note-passed').textContent = pass + ' / ' + TEST_IDS.length;
+  document.getElementById('note-passed').style.color = pass === TEST_IDS.length ? 'var(--green)' : pass > 5 ? 'var(--orange)' : 'var(--red)';
+}
+
+function clearNotes() {
+  if (!confirm('Clear all notes?')) return;
+  ['note-general','note-hr','note-steps','note-fall','note-comfort','note-issues'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  toast('Notes cleared');
+}
+
+function exportTestReport() {
+  let r = '=================================================\n';
+  r += '  TIGA PROTO 3 — FIELD TEST REPORT\n';
+  r += '=================================================\n';
+  r += '  Date:      ' + new Date().toLocaleString('en-MY') + '\n';
+  r += '  Firmware:  v6a\n';
+  r += '  Hardware:  Proto 3 (breadboard)\n';
+  r += '  Tester:    Christine\n';
+  const ms = S.sessionActive ? Date.now() - S.sessionStart : S.sessionMs;
+  r += '  Duration:  ' + Math.floor(ms/60000) + ' min\n\n';
+
+  let pass = 0, fail = 0;
+  TEST_IDS.forEach(id => {
+    const t = S.tests[id];
+    if (t.status === 'pass') pass++;
+    if (t.status === 'fail') fail++;
+  });
+  r += '  RESULTS: ' + pass + ' passed · ' + fail + ' failed · ' + (TEST_IDS.length - pass - fail) + ' pending\n';
+  r += '-------------------------------------------------\n\n';
+
+  const names = {
+    'hr-rest':'T01 Resting HR', 'hr-active':'T02 Active HR', 'spo2':'T03 SpO2',
+    'worn':'T04 Wearing detection', 'steps':'T05 Step accuracy', 'fall':'T06 Fall detection',
+    'alt':'T07 Altitude baseline', 'floors':'T08 Floor counting', 'alerts':'T09 Alert system',
+    'gps':'T10 GPS fix time'
+  };
+
+  TEST_IDS.forEach(id => {
+    const t = S.tests[id];
+    const icon = t.status === 'pass' ? '[PASS]' : t.status === 'fail' ? '[FAIL]' : '[PEND]';
+    r += icon + '  ' + names[id] + '\n';
+    if (t.result) r += '         ' + t.result + '\n';
+    if (t.note)   r += '  Note:  ' + t.note + '\n';
+    r += '\n';
+  });
+
+  r += '-------------------------------------------------\n';
+  r += '  Last dashboard readings:\n';
+  const d = S.data;
+  r += '  HR: ' + (d.hr || '--') + ' bpm\n';
+  r += '  SpO2: ' + (d.spo2Valid ? d.spo2 + '%' : 'no reading') + '\n';
+  r += '  Steps: ' + d.steps + '\n';
+  r += '  Altitude: ' + d.altM.toFixed(1) + 'm\n';
+  r += '  Floors: ' + d.floors + '\n';
+  r += '  Battery: ' + (d.battery || '--') + '%\n';
+  r += '  Pressure: ' + (d.pressure > 0 ? d.pressure.toFixed(1) + ' hPa' : '--') + '\n\n';
+
+  // Notes
+  const noteFields = [
+    ['note-general','General observations'],
+    ['note-hr','HR sensor performance'],
+    ['note-steps','Step counter'],
+    ['note-fall','Fall detection'],
+    ['note-comfort','Comfort & wearability'],
+    ['note-issues','Issues to fix']
+  ];
+  r += '-------------------------------------------------\n  NOTES\n\n';
+  noteFields.forEach(([id, label]) => {
+    const v = document.getElementById(id)?.value?.trim();
+    if (v) r += label + ':\n' + v + '\n\n';
+  });
+
+  const alertNotes = document.getElementById('note-alerts')?.value?.trim();
+  if (alertNotes) r += 'Alert system notes:\n' + alertNotes + '\n\n';
+
+  r += '=================================================\n  END OF REPORT\n=================================================\n';
+
+  // Copy to clipboard
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(r).then(() => toast('Report copied to clipboard ✓')).catch(() => fallbackCopy(r));
+  } else {
+    fallbackCopy(r);
+  }
+}
+
+function exportFullReport() {
+  exportTestReport();
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity  = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  toast('Report copied to clipboard ✓');
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+let toastT = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastT) clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  setConnStatus('demo');   // always start in demo until BLE connects
+  updateDash();
+  updateTestSummary();
+
+  // Restore notes from localStorage
+  ['note-general','note-hr','note-steps','note-fall','note-comfort','note-issues'].forEach(id => {
+    try {
+      const v = localStorage.getItem('tiga_' + id);
+      if (v) document.getElementById(id).value = v;
+    } catch(e) {}
+  });
+
+  // Auto-save notes on input
+  document.querySelectorAll('.note-input').forEach(el => {
+    el.addEventListener('input', () => {
+      try { localStorage.setItem('tiga_' + el.id, el.value); } catch(e) {}
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
