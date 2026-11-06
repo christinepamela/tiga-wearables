@@ -1,0 +1,151 @@
+// ============================================================
+// tiga_ble.h — BLE service for TIGA v6a
+// ============================================================
+// Drop this file into the same folder as tiga_main_v6a.ino
+// Then add  #include "tiga_ble.h"  near the top of the .ino
+// and call  bleSetup()  at the end of setup()
+// and call  bleNotify()  once per second in loop()
+//
+// Service UUID:   4fafc201-1fb5-459e-8fcc-c5c9c331914b  (TIGA custom)
+// Characteristic: beb5483e-36e1-4688-b7f5-ea07361b26a8  (TIGA data)
+//
+// Packet format — 20 bytes, little-endian:
+//   [0]    HR          uint8   bpm  (0 = no reading)
+//   [1]    SpO2        uint8   %    (0 = no reading)
+//   [2]    SpO2 valid  uint8   0|1
+//   [3-4]  Steps       uint16  count
+//   [5-6]  AltM x10   int16   e.g. 12.3m → 123
+//   [7]    Floors      uint8   count
+//   [8]    Battery     uint8   %
+//   [9]    Worn        uint8   0|1
+//   [10]   Falls       uint8   count this session
+//   [11]   Stable      uint8   0|1
+//   [12]   GPS fix     uint8   0|1
+//   [13]   GPS sats    uint8   count
+//   [14-15] Pressure x10 uint16  e.g. 1013.2 → 10132
+//   [16-19] Reserved   uint8 x4 (future use)
+//
+// Total: 20 bytes — fits in a single BLE notification (MTU 23).
+// ============================================================
+
+#pragma once
+
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// ── UUIDs ────────────────────────────────────────────────────
+#define TIGA_SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define TIGA_DATA_CHAR_UUID      "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// ── Globals ──────────────────────────────────────────────────
+BLEServer*         pServer        = nullptr;
+BLECharacteristic* pDataChar      = nullptr;
+bool               bleConnected   = false;
+bool               bleOldConnected = false;
+
+// ── Connection callbacks ──────────────────────────────────────
+class TIGAServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pSvr) override {
+    bleConnected = true;
+    Serial.println("[BLE] Client connected");
+  }
+  void onDisconnect(BLEServer* pSvr) override {
+    bleConnected = false;
+    Serial.println("[BLE] Client disconnected — restarting advertising");
+    // Restart advertising so phone can reconnect
+    BLEDevice::startAdvertising();
+  }
+};
+
+// ── Setup ─────────────────────────────────────────────────────
+void bleSetup() {
+  BLEDevice::init("TIGA-1");   // device name visible during BLE scan
+
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new TIGAServerCallbacks());
+
+  BLEService* pService = pServer->createService(TIGA_SERVICE_UUID);
+
+  // Data characteristic — notify only (device → phone)
+  pDataChar = pService->createCharacteristic(
+    TIGA_DATA_CHAR_UUID,
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  // CCCD descriptor — required for BLE notify to work
+  pDataChar->addDescriptor(new BLE2902());
+
+  pService->start();
+
+  // Advertise
+  BLEAdvertising* pAdv = BLEDevice::getAdvertising();
+  pAdv->addServiceUUID(TIGA_SERVICE_UUID);
+  pAdv->setScanResponse(true);
+  pAdv->setMinPreferred(0x06);  // helps with iPhone connection
+  pAdv->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+
+  Serial.println("[BLE] Advertising as TIGA-1");
+  Serial.println("[BLE] Service UUID: " TIGA_SERVICE_UUID);
+}
+
+// ── Notify — call once per second ────────────────────────────
+// Reads from the global `data` struct defined in tiga_main_v6a.ino
+// and packs it into a 20-byte notification.
+void bleNotify() {
+  if (!bleConnected) return;
+
+  uint8_t pkt[20] = {0};
+
+  // [0]  HR
+  pkt[0] = (uint8_t)constrain((int)data.heartRate, 0, 255);
+
+  // [1]  SpO2
+  pkt[1] = (uint8_t)constrain((int)data.spO2, 0, 100);
+
+  // [2]  SpO2 valid flag
+  pkt[2] = data.spO2Valid ? 1 : 0;
+
+  // [3-4] Steps (uint16 little-endian)
+  uint16_t steps = (uint16_t)constrain(data.steps, 0, 65535);
+  pkt[3] = steps & 0xFF;
+  pkt[4] = (steps >> 8) & 0xFF;
+
+  // [5-6] Altitude x10 as int16 (allows ±3276.7m range)
+  int16_t altX10 = (int16_t)constrain((int)(data.altitudeM * 10), -32768, 32767);
+  pkt[5] = altX10 & 0xFF;
+  pkt[6] = (altX10 >> 8) & 0xFF;
+
+  // [7]  Floors
+  pkt[7] = (uint8_t)constrain(data.floorsUp, 0, 255);
+
+  // [8]  Battery
+  pkt[8] = (uint8_t)constrain((int)data.battery, 0, 100);
+
+  // [9]  Worn
+  pkt[9] = data.wearing ? 1 : 0;
+
+  // [10] Falls this session
+  pkt[10] = (uint8_t)constrain(daily.fallCount, 0, 255);
+
+  // [11] Stable
+  pkt[11] = data.isStable ? 1 : 0;
+
+  // [12] GPS fix
+  pkt[12] = gpsData.hasFix ? 1 : 0;
+
+  // [13] GPS satellites
+  pkt[13] = (uint8_t)constrain(gpsData.satellites, 0, 255);
+
+  // [14-15] Pressure x10 as uint16 (e.g. 1013.2 → 10132)
+  uint16_t presX10 = (uint16_t)constrain((int)(data.pressureHPa * 10), 0, 65535);
+  pkt[14] = presX10 & 0xFF;
+  pkt[15] = (presX10 >> 8) & 0xFF;
+
+  // [16-19] Reserved — zero
+  pkt[16] = pkt[17] = pkt[18] = pkt[19] = 0;
+
+  pDataChar->setValue(pkt, 20);
+  pDataChar->notify();
+}

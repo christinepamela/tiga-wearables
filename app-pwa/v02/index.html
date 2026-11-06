@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TIGA — Health Companion</title>
+<link rel="manifest" href="manifest.json">
+
+<!--
+===============================================================
+  TIGA Companion App — v0.2
+===============================================================
+  Changes from v0.1:
+    - Contacts renamed Aaron + Sarah
+    - Home cards use warm, positive framing
+    - New Advanced screen: 19 detailed sensor metrics + explanations
+    - New Self tests screen: 6 guided tests (weekly default)
+    - New Add info screen: meds, symptoms, blood sugar, mood
+    - Export button generates PDF via print (advanced+tests+logs)
+    - Caregiver view rewritten: binary status, no raw data
+    - Multi-wearer data model scaffolded
+    - Gentle gamification: streaks, progress rings, no red alerts
+    - Mock drain rate slowed
+    - Diabetic flag makes blood sugar prominent
+===============================================================
+-->
+
+<style>
+:root {
+  --bg:           #0a0a0a;
+  --surface:      #161616;
+  --surface-2:    #1f1f1f;
+  --surface-3:    #262626;
+  --border:       #2a2a2a;
+  --text:         #f5f5f5;
+  --text-muted:   #888;
+  --text-dim:     #555;
+  --accent:       #4ade80;
+  --accent-dim:   #166534;
+  --warn:         #fb923c;
+  --danger:       #ef4444;
+  --info:         #60a5fa;
+  --purple:       #a78bfa;
+  --radius:       14px;
+  --radius-sm:    8px;
+  --radius-lg:    20px;
+  --shadow:       0 2px 8px rgba(0,0,0,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+               "Segoe UI", Roboto, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  font-size: 16px;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px 100px;
+  display: none;
+  -webkit-overflow-scrolling: touch;
+}
+.screen.active { display: block; }
+
+.screen-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+.screen-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  padding: 0;
+  margin-bottom: 16px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.back-btn:active { color: var(--text); }
+
+nav.bottom {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(22, 22, 22, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+  z-index: 100;
+}
+nav.bottom button {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+nav.bottom button .icon {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+nav.bottom button.active { color: var(--accent); }
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+}
+.card-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.card-value {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.card-unit {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.card-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.hero {
+  padding: 24px 20px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.hero .card-value { font-size: 52px; }
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.metric-grid .card { margin-bottom: 0; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-2);
+}
+.chip .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.chip.ok .dot { background: var(--accent); }
+.chip.warn .dot { background: var(--warn); }
+.chip.danger .dot { background: var(--danger); }
+
+.btn {
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn.danger    { background: var(--danger); color: #fff; }
+.btn.ghost     { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn + .btn { margin-top: 10px; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn + .btn { margin-top: 0; }
+
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.list-item:active { background: var(--surface-2); }
+.list-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.list-item-title { font-size: 15px; font-weight: 500; }
+.list-item-sub   { font-size: 13px; color: var(--text-muted); }
+.list-item-right { color: var(--text-dim); font-size: 20px; }
+.list-item.toggle-item { cursor: default; }
+.list-item.toggle-item:active { background: var(--surface); }
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+.switch.on { background: var(--accent-dim); }
+.switch.on::after { left: 20px; background: var(--accent); }
+
+#login {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100dvh;
+  padding: 40px 24px;
+  text-align: center;
+}
+#login .logo {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--info) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+#login .tagline {
+  color: var(--text-muted);
+  margin-bottom: 48px;
+  font-size: 15px;
+}
+#login .role-choice { width: 100%; max-width: 320px; }
+#login .role-choice h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+.role-btn {
+  width: 100%;
+  padding: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.role-btn:active { transform: scale(0.98); }
+.role-btn:hover  { border-color: var(--accent); }
+.role-btn .title { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+.role-btn .desc  { font-size: 13px; color: var(--text-muted); }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.topbar .user { display: flex; align-items: center; gap: 10px; }
+.topbar .avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px;
+}
+.topbar .user-info .name { font-weight: 600; font-size: 15px; }
+.topbar .user-info .mode { font-size: 11px; color: var(--text-muted); }
+
+#toast {
+  position: fixed;
+  bottom: 100px;
+  left: 16px; right: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  z-index: 200;
+  transform: translateY(200%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#toast.show { transform: translateY(0); }
+
+.history-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 4px 8px;
+}
+.history-date:first-child { margin-top: 0; }
+
+.hr-pulse {
+  display: inline-block;
+  animation: heartbeat 1s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: flex-end;
+  z-index: 300;
+}
+.modal-backdrop.show { display: flex; }
+.modal {
+  background: var(--surface);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  width: 100%;
+  max-height: 85dvh;
+  overflow-y: auto;
+  animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.modal-handle {
+  width: 40px; height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.modal-title   { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.modal-subtitle{ color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+
+.mood-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.mood-btn {
+  aspect-ratio: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 32px;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: inherit;
+  color: var(--text);
+}
+.mood-btn:active { transform: scale(0.95); }
+.mood-btn .label { font-size: 10px; color: var(--text-muted); }
+
+.num-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  text-align: center;
+  font-family: inherit;
+  margin-bottom: 12px;
+}
+.num-input:focus { outline: none; border-color: var(--accent); }
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.check-item:active { background: var(--surface-3); }
+.check-box {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #000;
+}
+.check-item.checked .check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check-item.checked .check-box::after { content: '✓'; font-weight: 800; }
+.check-item-label { flex: 1; font-size: 15px; }
+.check-item.checked .check-item-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.streak-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.streak-icon { font-size: 36px; line-height: 1; }
+.streak-main { flex: 1; }
+.streak-title { font-weight: 600; font-size: 15px; margin-bottom: 2px; }
+.streak-sub   { font-size: 13px; color: var(--text-muted); }
+
+.selftest-card {
+  background: linear-gradient(135deg, #1a2e1a 0%, var(--surface-2) 100%);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.selftest-card .card-label { color: var(--accent); }
+.selftest-card h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.selftest-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.metric-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 10px;
+}
+.metric-row .metric-name {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.metric-row .metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 4px 0;
+}
+.metric-row .metric-value.pending {
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 500;
+}
+.metric-row .metric-explain {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.wearer-status-card {
+  padding: 28px 20px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.wearer-status-card .wearer-name {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.wearer-status-card .wearer-state {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+.wearer-status-card .wearer-state.ok    { color: var(--accent); }
+.wearer-status-card .wearer-state.check { color: var(--warn);   }
+.wearer-status-card .wearer-state.alert { color: var(--danger); }
+.wearer-status-card .wearer-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tag {
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text);
+  font-family: inherit;
+}
+.tag:active { transform: scale(0.95); }
+.tag.selected {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media print {
+  body { background: white; color: black; }
+  nav.bottom, .back-btn, #toast, .modal-backdrop { display: none !important; }
+  .screen { display: block !important; padding: 0 !important; overflow: visible !important; }
+  .screen:not(#screen-export) { display: none !important; }
+  .card, .metric-row { background: white; border: 1px solid #ccc; page-break-inside: avoid; }
+  .card-label { color: #666; }
+  .card-value, .metric-name, .metric-value { color: black; }
+  .card-detail, .metric-explain { color: #333; }
+  .screen-title, .screen-subtitle { color: black; }
+}
+</style>
+</head>
+
+<body>
+
+<div id="login">
+  <div class="logo">tiga</div>
+  <div class="tagline">Health companion for the people you love</div>
+  <div class="role-choice">
+    <h3>I am a…</h3>
+    <button class="role-btn" onclick="setRole('user')">
+      <div class="title">Wearer</div>
+      <div class="desc">I wear a TIGA device and track my health</div>
+    </button>
+    <button class="role-btn" onclick="setRole('caregiver')">
+      <div class="title">Caregiver</div>
+      <div class="desc">I look after someone who wears a TIGA device</div>
+    </button>
+  </div>
+</div>
+
+<div id="app" style="display: none;">
+
+  <section class="screen active" id="screen-home">
+    <div class="topbar">
+      <div class="user">
+        <div class="avatar" id="avatar">W</div>
+        <div class="user-info">
+          <div class="name" id="user-name">Welcome back</div>
+          <div class="mode" id="user-mode">Demo mode</div>
+        </div>
+      </div>
+      <span class="chip ok" id="connection-chip">
+        <span class="dot"></span>
+        <span id="connection-text">Demo</span>
+      </span>
+    </div>
+
+    <div id="wearer-home">
+      <div class="screen-title" id="home-greeting">Good morning</div>
+      <div class="screen-subtitle">Here's how you're doing today</div>
+
+      <div id="streak-card-home" class="streak-card" style="display:none;">
+        <div class="streak-icon">🔥</div>
+        <div class="streak-main">
+          <div class="streak-title" id="streak-title">3-day logging streak</div>
+          <div class="streak-sub" id="streak-sub">You're doing wonderfully. Keep going!</div>
+        </div>
+      </div>
+
+      <div id="selftest-card-home" class="selftest-card" style="display:none;">
+        <div class="card-label">Self tests this week</div>
+        <h3>5 minutes, when you're ready</h3>
+        <p>Balance, mobility and strength check-ups you can do at home.</p>
+        <div class="btn-row">
+          <button class="btn" onclick="showScreen('selftest')">Start</button>
+          <button class="btn ghost" onclick="snoozeSelftest()">Later</button>
+        </div>
+      </div>
+
+      <div class="card hero">
+        <div class="card-label">Heart rate</div>
+        <div class="card-value">
+          <span id="hr-value">72</span><span class="hr-pulse">♥</span>
+          <span class="card-unit">bpm</span>
+        </div>
+        <div class="card-detail" id="hr-status">Steady and healthy</div>
+        <div class="card-detail" style="margin-top:4px;">Resting rate is usually 60–100 bpm.</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="card">
+          <div class="card-label">Steps</div>
+          <div class="card-value" id="steps-value">2,847</div>
+          <div class="card-detail" id="steps-detail">of 3,000 goal</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Battery</div>
+          <div class="card-value" id="battery-value">84<span class="card-unit">%</span></div>
+          <div class="card-detail" id="battery-detail">~18h remaining</div>
+        </div>
+        <div class="card">
+          <div class="card-label">SpO₂</div>
+          <div class="card-value" id="spo2-value">97<span class="card-unit">%</span></div>
+          <div class="card-detail">Oxygen in your blood. 95–100% is healthy.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Active time</div>
+          <div class="card-value" id="active-value">42<span class="card-unit">min</span></div>
+          <div class="card-detail">Today so far</div>
+        </div>
+      </div>
+
+      <div class="card" id="sugar-card" style="display:none;">
+        <div class="card-label">Blood sugar — latest</div>
+        <div class="card-value" id="sugar-value">—<span class="card-unit">mg/dL</span></div>
+        <div class="card-detail" id="sugar-time">No reading logged today</div>
+        <button class="btn secondary" style="margin-top:12px;" onclick="openLog('sugar')">Log reading</button>
+      </div>
+
+      <div class="card" id="mood-card" style="display:none;">
+        <div class="card-label">Today's mood</div>
+        <div style="font-size:48px;margin:4px 0;" id="mood-emoji">😊</div>
+        <div class="card-detail" id="mood-label">Feeling good</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Safety</div>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+          <span class="chip ok"><span class="dot"></span>No falls today</span>
+          <span class="chip ok"><span class="dot"></span>Stable gait</span>
+          <span class="chip ok" id="worn-chip"><span class="dot"></span>Device worn</span>
+        </div>
+        <div class="card-detail" id="worn-note" style="margin-top:10px;">Device worn — all good.</div>
+      </div>
+
+      <button class="btn secondary" style="margin-top:20px;" onclick="showScreen('addinfo')">
+        + Add medical info
+      </button>
+    </div>
+
+    <div id="caregiver-home" style="display:none;">
+      <div class="screen-title">Your family</div>
+      <div class="screen-subtitle">People you're looking after</div>
+      <div id="wearers-list"></div>
+      <button class="btn secondary" style="margin-top:12px;" onclick="addWearer()">
+        + Add another wearer
+      </button>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-history">
+    <div class="screen-title" id="history-title">History</div>
+    <div class="screen-subtitle" id="history-subtitle">Past walks and check-ins</div>
+    <div id="history-list"></div>
+  </section>
+
+  <section class="screen" id="screen-alerts">
+    <div class="screen-title" id="alerts-title">Emergency</div>
+    <div class="screen-subtitle" id="alerts-subtitle">Your emergency contacts</div>
+    <div id="contacts-list"></div>
+    <button class="btn danger" style="margin-top:20px;" onclick="triggerSOS()">Send SOS alert</button>
+    <button class="btn secondary" onclick="addContact()">+ Add emergency contact</button>
+  </section>
+
+  <section class="screen" id="screen-settings">
+    <div class="screen-title">Settings</div>
+    <div class="screen-subtitle">Configure your TIGA experience</div>
+
+    <div class="card">
+      <div class="card-label">Features</div>
+      <div class="list-item toggle-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Show Advanced readings</div>
+          <div class="list-item-sub">Detailed sensor data with explanations</div>
+        </div>
+        <div class="switch" id="toggle-advanced" onclick="toggleSetting('advanced', this)"></div>
+      </div>
+      <div class="list-item toggle-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Show Self tests</div>
+          <div class="list-item-sub">Weekly balance and mobility check-ups</div>
+        </div>
+        <div class="switch on" id="toggle-selftest" onclick="toggleSetting('selftest', this)"></div>
+      </div>
+      <div class="list-item toggle-item">
+        <div class="list-item-main">
+          <div class="list-item-title">I have diabetes</div>
+          <div class="list-item-sub">Makes blood sugar prominent on Home</div>
+        </div>
+        <div class="switch on" id="toggle-diabetes" onclick="toggleSetting('diabetes', this)"></div>
+      </div>
+      <div class="list-item toggle-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Streaks and encouragement</div>
+          <div class="list-item-sub">Gentle reminders when you log regularly</div>
+        </div>
+        <div class="switch on" id="toggle-gamification" onclick="toggleSetting('gamification', this)"></div>
+      </div>
+    </div>
+
+    <div class="card" id="advanced-section" style="display:none;">
+      <div class="card-label">Advanced</div>
+      <div class="list-item" onclick="showScreen('advanced')">
+        <div class="list-item-main">
+          <div class="list-item-title">View Advanced readings</div>
+          <div class="list-item-sub">19 detailed sensor metrics</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Self tests</div>
+      <div class="list-item" onclick="showScreen('selftest')">
+        <div class="list-item-main">
+          <div class="list-item-title">Open Self tests</div>
+          <div class="list-item-sub">Balance, mobility, strength</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+      <div class="list-item toggle-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Self test frequency</div>
+          <div class="list-item-sub" id="frequency-sub">Weekly</div>
+        </div>
+        <div class="list-item-right" onclick="toggleFrequency()">Change</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Medical info</div>
+      <div class="list-item" onclick="showScreen('addinfo')">
+        <div class="list-item-main">
+          <div class="list-item-title">Add medical info</div>
+          <div class="list-item-sub">Medications, symptoms, blood sugar, mood</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Export</div>
+      <div class="list-item" onclick="exportReport()">
+        <div class="list-item-main">
+          <div class="list-item-title">Export report for doctor</div>
+          <div class="list-item-sub">PDF with readings, self tests and logs</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Device</div>
+      <div class="list-item" onclick="scanForDevice()">
+        <div class="list-item-main">
+          <div class="list-item-title">Connect TIGA wearable</div>
+          <div class="list-item-sub" id="device-status">No device paired</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Account</div>
+      <div class="list-item" onclick="switchRole()">
+        <div class="list-item-main">
+          <div class="list-item-title">Switch role</div>
+          <div class="list-item-sub" id="current-role">Currently: Wearer</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+      <div class="list-item" onclick="logout()">
+        <div class="list-item-main">
+          <div class="list-item-title">Sign out</div>
+          <div class="list-item-sub">Return to login screen</div>
+        </div>
+        <div class="list-item-right">›</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">About</div>
+      <div class="list-item">
+        <div class="list-item-main">
+          <div class="list-item-title">Version</div>
+          <div class="list-item-sub">TIGA App v0.2 (mock data)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-advanced">
+    <button class="back-btn" onclick="showScreen('home')">‹ Back</button>
+    <div class="screen-title">Advanced readings</div>
+    <div class="screen-subtitle">Detailed sensor data with plain-English explanations</div>
+    <div id="advanced-list"></div>
+  </section>
+
+  <section class="screen" id="screen-selftest">
+    <button class="back-btn" onclick="showScreen('home')">‹ Back</button>
+    <div class="screen-title">Self tests</div>
+    <div class="screen-subtitle">Guided check-ups you can do at home</div>
+    <div id="selftest-list"></div>
+  </section>
+
+  <section class="screen" id="screen-addinfo">
+    <button class="back-btn" onclick="showScreen('home')">‹ Back</button>
+    <div class="screen-title">Add medical info</div>
+    <div class="screen-subtitle">Tap any of these to log information. All optional.</div>
+    <div id="addinfo-list"></div>
+  </section>
+
+  <section class="screen" id="screen-export">
+    <button class="back-btn" onclick="showScreen('settings')">‹ Back</button>
+    <div class="screen-title">Report preview</div>
+    <div class="screen-subtitle">Review the report before printing or saving as PDF.</div>
+    <div id="export-content"></div>
+    <button class="btn" style="margin-top:20px;" onclick="window.print()">Print / Save as PDF</button>
+  </section>
+
+  <nav class="bottom">
+    <button class="active" data-screen="home" onclick="showScreen('home')">
+      <span class="icon">●</span>Home
+    </button>
+    <button data-screen="history" onclick="showScreen('history')">
+      <span class="icon">≡</span>History
+    </button>
+    <button data-screen="alerts" onclick="showScreen('alerts')">
+      <span class="icon">!</span><span id="nav-alerts-label">Emergency</span>
+    </button>
+    <button data-screen="settings" onclick="showScreen('settings')">
+      <span class="icon">⚙</span>Settings
+    </button>
+  </nav>
+</div>
+
+<div class="modal-backdrop" id="modal-backdrop" onclick="closeModal(event)">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const ADVANCED_METRICS = [
+  { key:'cadence',      name:'Gait cadence',
+    explain:"How many steps per minute when you walk. Sudden changes may signal balance problems.",
+    unit:'steps/min', mock:112, available:true },
+  { key:'symmetry',     name:'Stride symmetry',
+    explain:"Whether your left and right steps are even. Uneven walking can increase fall risk.",
+    unit:'%', mock:96, available:true },
+  { key:'walkspeed',    name:'Walking speed',
+    explain:"How fast you walk. Faster walking is linked to better long-term health.",
+    unit:'m/s', mock:1.2, available:true },
+  { key:'posture',      name:'Tilt and posture',
+    explain:"How straight you're standing throughout the day. Good posture protects your back.",
+    unit:'°', mock:3.5, available:true },
+  { key:'tremor',       name:'Steady-hand check',
+    explain:"Tiny movements in your hand. Only runs when you start the test. Used to track conditions like essential tremor.",
+    unit:'', mock:'Not yet measured', available:false },
+  { key:'sleep',        name:'Sleep position',
+    explain:"How much you move at night. Lots of movement may mean restless sleep. Only tracked if worn overnight.",
+    unit:'', mock:'Not worn overnight', available:false },
+  { key:'activity',     name:'Activity type',
+    explain:"What you've been doing — walking, sitting, climbing stairs — based on how you moved.",
+    unit:'', mock:'Mostly walking', available:true },
+  { key:'hrv',          name:'Heart rate variability',
+    explain:"Small changes in time between heartbeats. Higher variability usually means good recovery and lower stress.",
+    unit:'ms', mock:42, available:false, note:'Available after the MAX30102 sensor is installed.' },
+  { key:'ortho',        name:'Orthostatic check',
+    explain:"Your heart's response when you stand up from sitting. Sudden changes can cause dizziness and falls.",
+    unit:'', mock:'Normal response', available:false, note:'Needs MAX30102 sensor.' },
+  { key:'recovery',     name:'Pulse rate recovery',
+    explain:"How quickly your heart slows down after activity. Faster recovery means better heart fitness.",
+    unit:'bpm/min', mock:18, available:false, note:'Needs MAX30102 sensor.' },
+  { key:'stress',       name:'Stress indicator',
+    explain:"Calculated from your heart rate and its variability together. A higher number means your body is under more strain.",
+    unit:'/10', mock:3, available:false, note:'Derived from heart rate + variability. Needs MAX30102.' },
+  { key:'resp',         name:'Respiratory rate',
+    explain:"How many breaths you take per minute. Estimated from the small pauses in your heartbeat. Typical range is 12–20.",
+    unit:'/min', mock:16, available:false, note:'Derived from heart signal. Needs MAX30102.' },
+  { key:'elev',         name:'Elevation changes',
+    explain:"Hills and slopes during your walks.",
+    unit:'m', mock:12, available:false, note:'Needs BMP280 sensor.' },
+  { key:'floors',       name:'Floors climbed',
+    explain:"How many flights of stairs you've gone up today.",
+    unit:'', mock:2, available:false, note:'Needs BMP280 sensor.' },
+  { key:'stairdesc',    name:'Stair descent detection',
+    explain:"Detected when you walk down stairs. Helps us understand any fall events better.",
+    unit:'', mock:'1 today', available:false, note:'Needs BMP280 sensor.' },
+  { key:'weather',      name:'Weather sensitivity',
+    explain:"Whether big pressure changes in the weather match days you feel joint pain or headaches.",
+    unit:'', mock:'Coming after 30 days of data', available:false },
+  { key:'fallseverity', name:'Fall severity estimate',
+    explain:"If a fall happens, we estimate how hard it was using movement and altitude change.",
+    unit:'', mock:'No falls today', available:true },
+  { key:'fallquality',  name:'Alert accuracy check',
+    explain:"We check whether the device was on you when a fall is detected. Helps reduce false alarms.",
+    unit:'', mock:'Working correctly', available:true },
+  { key:'adjhr',        name:'Activity-adjusted heart rate',
+    explain:"Your heart rate compared to what's normal for what you were doing at the time.",
+    unit:'', mock:'Within expected range', available:true },
+];
+
+const SELFTESTS = [
+  { key:'balance',   name:'Balance sway',
+    why:'Checks how steady you are when standing still. Helps predict fall risk.',
+    how:'Stand still with feet together, eyes open, for 30 seconds.', duration:'30 sec' },
+  { key:'tug',       name:'Timed Up and Go',
+    why:'Gold-standard mobility test — covers standing, walking, turning, sitting.',
+    how:'From a chair: stand up, walk 3 metres, turn around, walk back, sit down.', duration:'20 sec' },
+  { key:'sit2stand', name:'Sit-to-stand reps',
+    why:'Checks your leg strength.',
+    how:'Sit in a chair. Stand up and sit down as many times as you can in 30 seconds.', duration:'30 sec' },
+  { key:'restinghr', name:'Resting heart rate',
+    why:'Checks your heart when you are calm. Best done in the morning before getting out of bed.',
+    how:'Sit quietly for one minute. We will record your heart rate.', duration:'1 min' },
+  { key:'reaction',  name:'Reaction time',
+    why:'Checks how quickly you notice and respond to things.',
+    how:'When the screen flashes green, tap it as fast as you can.', duration:'30 sec' },
+  { key:'spo2check', name:'SpO₂ spot check',
+    why:'Quick reading of your blood oxygen level.',
+    how:'Stay still for 15 seconds while we take a reading.', duration:'15 sec' },
+];
+
+const COMMON_SYMPTOMS = [
+  'Headache','Dizzy','Short of breath','Chest tightness',
+  'Nausea','Joint pain','Back pain','Fatigue','Fever',
+  'Poor sleep','Swollen legs','Numbness'
+];
+
+const COMMON_MEDS = [
+  { name:'Morning blood pressure',    time:'8:00 AM'  },
+  { name:'Morning diabetes medicine', time:'8:00 AM'  },
+  { name:'Vitamin D',                 time:'12:00 PM' },
+  { name:'Evening blood pressure',    time:'8:00 PM'  },
+];
+
+const MOODS = [
+  { emoji:'😀', label:'Great' },
+  { emoji:'🙂', label:'Good' },
+  { emoji:'😐', label:'OK' },
+  { emoji:'😕', label:'Tired' },
+  { emoji:'😢', label:'Unwell' },
+];
+
+const state = {
+  role: null,
+  mode: 'demo',
+  device: null,
+  connected: false,
+  settings: {
+    advanced:     false,
+    selftest:     true,
+    diabetes:     true,
+    gamification: true,
+    frequency:    'weekly',
+  },
+  ui: { selftestSnoozed: false },
+  data: { hr:72, steps:2847, battery:84, spo2:97, active:42, worn:true, fall:false },
+  contacts: [
+    { name:'Aaron', phone:'+60 12-345 6789', primary:true },
+    { name:'Sarah', phone:'+60 19-876 5432', primary:false },
+  ],
+  wearers: [
+    { id:'w1', name:'Mom', status:'ok', lastSeen:'8 min ago', falls:0, worn:true, summary:'All is well' },
+  ],
+  logs: {
+    sugar: [
+      { time:'Yesterday 8:00 AM',  value:124 },
+      { time:'2 days ago 8:00 AM', value:131 },
+    ],
+    mood: [],
+    symptoms: [],
+    meds: {},
+  },
+  streaks: { logging:3, selftest:1 },
+  history: [
+    { date:'Today',     time:'08:14', duration:'42 min', steps:2847, distance:'2.3 km', falls:0 },
+    { date:'Yesterday', time:'17:30', duration:'1h 12m', steps:5120, distance:'4.1 km', falls:0 },
+    { date:'Yesterday', time:'07:45', duration:'38 min', steps:2103, distance:'1.8 km', falls:0 },
+    { date:'18 Apr',    time:'07:58', duration:'9h 03m', steps:0,    distance:'4.4 km', falls:0 },
+    { date:'17 Apr',    time:'16:20', duration:'52 min', steps:3890, distance:'3.2 km', falls:1 },
+  ],
+};
+
+function save() {
+  try {
+    localStorage.setItem('tiga_state', JSON.stringify({
+      role:state.role, mode:state.mode, settings:state.settings,
+      ui:state.ui, contacts:state.contacts, logs:state.logs, streaks:state.streaks,
+    }));
+  } catch(e) { console.warn('localStorage unavailable'); }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem('tiga_state');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.assign(state, {
+      role:     saved.role     ?? state.role,
+      mode:     saved.mode     ?? state.mode,
+      settings: { ...state.settings, ...(saved.settings || {}) },
+      ui:       { ...state.ui,       ...(saved.ui       || {}) },
+      contacts: saved.contacts ?? state.contacts,
+      logs:     { ...state.logs,     ...(saved.logs     || {}) },
+      streaks:  { ...state.streaks,  ...(saved.streaks  || {}) },
+    });
+  } catch(e) { console.warn('Could not restore state'); }
+}
+
+function setRole(role) {
+  state.role = role;
+  save();
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display   = 'flex';
+  applyRole();
+  updateUI();
+}
+
+function applyRole() {
+  const nameEl  = document.getElementById('user-name');
+  const modeEl  = document.getElementById('user-mode');
+  const avatar  = document.getElementById('avatar');
+  const navLbl  = document.getElementById('nav-alerts-label');
+  const aTitle  = document.getElementById('alerts-title');
+  const aSub    = document.getElementById('alerts-subtitle');
+  const cRole   = document.getElementById('current-role');
+  const wHome   = document.getElementById('wearer-home');
+  const cHome   = document.getElementById('caregiver-home');
+  const hTitle  = document.getElementById('history-title');
+  const hSub    = document.getElementById('history-subtitle');
+
+  if (state.role === 'caregiver') {
+    nameEl.textContent  = 'Caregiver view';
+    avatar.textContent  = 'C';
+    navLbl.textContent  = 'Alerts';
+    aTitle.textContent  = 'Alerts';
+    aSub.textContent    = 'Recent events from your wearers';
+    cRole.textContent   = 'Currently: Caregiver';
+    wHome.style.display = 'none';
+    cHome.style.display = 'block';
+    hTitle.textContent  = 'Safety events';
+    hSub.textContent    = 'Falls, SOS, and device issues only';
+  } else {
+    nameEl.textContent  = 'Welcome back';
+    avatar.textContent  = 'W';
+    navLbl.textContent  = 'Emergency';
+    aTitle.textContent  = 'Emergency';
+    aSub.textContent    = 'Your emergency contacts';
+    cRole.textContent   = 'Currently: Wearer';
+    wHome.style.display = 'block';
+    cHome.style.display = 'none';
+    hTitle.textContent  = 'History';
+    hSub.textContent    = 'Past walks and check-ins';
+  }
+  modeEl.textContent = state.mode === 'demo' ? 'Demo mode' : 'Live device';
+  updateToggles();
+  applySettings();
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const tgt = document.getElementById('screen-' + name);
+  if (tgt) tgt.classList.add('active');
+  document.querySelectorAll('nav.bottom button').forEach(b => {
+    b.classList.toggle('active', b.dataset.screen === name);
+  });
+  if (name === 'advanced') renderAdvanced();
+  if (name === 'selftest') renderSelftest();
+  if (name === 'addinfo')  renderAddInfo();
+  if (name === 'export')   renderExport();
+}
+
+function switchRole() {
+  state.role = (state.role === 'user') ? 'caregiver' : 'user';
+  save();
+  applyRole();
+  showScreen('home');
+  toast('Switched to ' + (state.role === 'user' ? 'Wearer' : 'Caregiver') + ' view');
+}
+
+function logout() {
+  state.role = null;
+  save();
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('app').style.display   = 'none';
+}
+
+function updateToggles() {
+  ['advanced','selftest','diabetes','gamification'].forEach(k => {
+    const el = document.getElementById('toggle-' + k);
+    if (el) el.classList.toggle('on', state.settings[k]);
+  });
+  document.getElementById('frequency-sub').textContent =
+    state.settings.frequency === 'daily' ? 'Daily' : 'Weekly';
+}
+
+function toggleSetting(key, el) {
+  state.settings[key] = !state.settings[key];
+  el.classList.toggle('on', state.settings[key]);
+  save();
+  applySettings();
+  const labels = {
+    advanced:     'Advanced readings',
+    selftest:     'Self tests',
+    diabetes:     'Diabetes mode',
+    gamification: 'Streaks and encouragement',
+  };
+  toast(labels[key] + ' ' + (state.settings[key] ? 'turned on' : 'turned off'));
+}
+
+function toggleFrequency() {
+  state.settings.frequency = state.settings.frequency === 'weekly' ? 'daily' : 'weekly';
+  save();
+  updateToggles();
+  toast('Self tests now ' + state.settings.frequency);
+}
+
+function applySettings() {
+  document.getElementById('advanced-section').style.display =
+    state.settings.advanced ? 'block' : 'none';
+  document.getElementById('sugar-card').style.display =
+    state.settings.diabetes && state.role === 'user' ? 'block' : 'none';
+  document.getElementById('selftest-card-home').style.display =
+    state.settings.selftest && !state.ui.selftestSnoozed && state.role === 'user' ? 'block' : 'none';
+  document.getElementById('streak-card-home').style.display =
+    state.settings.gamification && state.role === 'user' && state.streaks.logging > 0 ? 'flex' : 'none';
+}
+
+function snoozeSelftest() {
+  state.ui.selftestSnoozed = true;
+  save();
+  applySettings();
+  toast('Reminder hidden. You can start a test anytime from Settings.');
+}
+
+function mockTick() {
+  if (state.mode !== 'demo') return;
+  const hrDrift = (Math.random() - 0.5) * 4;
+  state.data.hr = Math.max(60, Math.min(90, Math.round(state.data.hr + hrDrift)));
+  state.data.steps += Math.floor(Math.random() * 3);
+  if (Math.random() < 0.005) {
+    state.data.battery = Math.max(0, state.data.battery - 1);
+  }
+  state.data.spo2 = 96 + Math.floor(Math.random() * 4);
+  if (Math.random() < 0.05) state.data.active++;
+  updateUI();
+}
+
+function updateUI() {
+  const d = state.data;
+  document.getElementById('hr-value').textContent      = d.hr;
+  document.getElementById('steps-value').textContent   = d.steps.toLocaleString();
+  document.getElementById('battery-value').innerHTML   = d.battery + '<span class="card-unit">%</span>';
+  document.getElementById('spo2-value').innerHTML      = d.spo2    + '<span class="card-unit">%</span>';
+  document.getElementById('active-value').innerHTML    = d.active  + '<span class="card-unit">min</span>';
+
+  const hrStatus = document.getElementById('hr-status');
+  if      (d.hr < 50)  hrStatus.textContent = 'Low — please rest and sip water';
+  else if (d.hr < 60)  hrStatus.textContent = 'Calm and resting';
+  else if (d.hr <= 90) hrStatus.textContent = 'Steady and healthy';
+  else if (d.hr <= 110)hrStatus.textContent = 'Active — working hard';
+  else                 hrStatus.textContent = 'High — take a rest';
+
+  const stepsDetail = document.getElementById('steps-detail');
+  const pct = d.steps / 3000;
+  if      (pct < 0.1) stepsDetail.textContent = "Let's start moving today";
+  else if (pct < 0.5) stepsDetail.textContent = 'Good start — keep going';
+  else if (pct < 1.0) stepsDetail.textContent = 'of 3,000 goal';
+  else                stepsDetail.textContent = 'Goal reached. Well done!';
+
+  const hoursLeft = Math.round(d.battery * 0.2);
+  document.getElementById('battery-detail').textContent = '~' + hoursLeft + 'h remaining';
+
+  const chip = document.getElementById('connection-chip');
+  const txt  = document.getElementById('connection-text');
+  if (state.mode === 'demo')    { chip.className = 'chip ok';   txt.textContent = 'Demo'; }
+  else if (state.connected)     { chip.className = 'chip ok';   txt.textContent = 'Connected'; }
+  else                          { chip.className = 'chip warn'; txt.textContent = 'Disconnected'; }
+
+  const wornNote = document.getElementById('worn-note');
+  const wornChip = document.getElementById('worn-chip');
+  if (d.worn) {
+    wornNote.textContent  = 'Device worn — all good.';
+    wornChip.className    = 'chip ok';
+    wornChip.innerHTML    = '<span class="dot"></span>Device worn';
+  } else {
+    wornNote.textContent  = 'Device not worn — please check.';
+    wornChip.className    = 'chip warn';
+    wornChip.innerHTML    = '<span class="dot"></span>Device not worn';
+  }
+
+  if (state.logs.sugar.length) {
+    const latest = state.logs.sugar[state.logs.sugar.length - 1];
+    document.getElementById('sugar-value').innerHTML = latest.value + '<span class="card-unit">mg/dL</span>';
+    document.getElementById('sugar-time').textContent = latest.time;
+  } else {
+    document.getElementById('sugar-value').innerHTML = '—<span class="card-unit">mg/dL</span>';
+    document.getElementById('sugar-time').textContent = 'No reading logged today';
+  }
+
+  const todayKey = new Date().toISOString().slice(0,10);
+  const moodToday = state.logs.mood.find(m => m.date === todayKey);
+  const moodCard = document.getElementById('mood-card');
+  if (moodToday) {
+    moodCard.style.display = 'block';
+    document.getElementById('mood-emoji').textContent = moodToday.emoji;
+    document.getElementById('mood-label').textContent = 'Feeling ' + moodToday.label.toLowerCase();
+  } else {
+    moodCard.style.display = 'none';
+  }
+
+  if (state.streaks.logging > 0) {
+    document.getElementById('streak-title').textContent = state.streaks.logging + '-day logging streak';
+    document.getElementById('streak-sub').textContent = "You're doing wonderfully. Keep going!";
+  }
+
+  document.getElementById('device-status').textContent =
+    state.connected ? ('Paired: ' + (state.device?.name || 'TIGA')) : 'No device paired';
+
+  renderHistory();
+  renderContacts();
+  renderWearers();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  if (state.role === 'caregiver') {
+    const events = state.history.filter(h => h.falls > 0);
+    if (events.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'card';
+      empty.innerHTML = `<div class="card-label">All quiet</div>
+        <div class="card-detail" style="margin-top:6px;">
+          No safety events to show. You'll be notified if anything happens.
+        </div>`;
+      list.appendChild(empty);
+      return;
+    }
+    events.forEach(h => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.innerHTML = `<div class="list-item-main">
+        <div class="list-item-title">Fall detected — ${h.date} ${h.time}</div>
+        <div class="list-item-sub">Wearer confirmed OK</div>
+      </div><div class="list-item-right">›</div>`;
+      list.appendChild(item);
+    });
+    return;
+  }
+  let lastDate = null;
+  state.history.forEach(h => {
+    if (h.date !== lastDate) {
+      const d = document.createElement('div');
+      d.className = 'history-date';
+      d.textContent = h.date;
+      list.appendChild(d);
+      lastDate = h.date;
+    }
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `<div class="list-item-main">
+      <div class="list-item-title">Walk at ${h.time}</div>
+      <div class="list-item-sub">${h.duration} · ${h.steps.toLocaleString()} steps · ${h.distance}</div>
+    </div><div class="list-item-right">${h.falls ? '⚠' : '›'}</div>`;
+    list.appendChild(item);
+  });
+}
+
+function renderContacts() {
+  const list = document.getElementById('contacts-list');
+  list.innerHTML = '';
+  state.contacts.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `<div class="list-item-main">
+      <div class="list-item-title">${c.name}${c.primary ? ' ★' : ''}</div>
+      <div class="list-item-sub">${c.phone}</div>
+    </div><div class="list-item-right">›</div>`;
+    list.appendChild(item);
+  });
+}
+
+function renderWearers() {
+  if (state.role !== 'caregiver') return;
+  const list = document.getElementById('wearers-list');
+  list.innerHTML = '';
+  state.wearers.forEach(w => {
+    const card = document.createElement('div');
+    card.className = 'wearer-status-card';
+    const stateText = w.status === 'ok' ? 'All is well'
+                    : w.status === 'check' ? 'Please check in'
+                    : 'Needs attention';
+    card.innerHTML = `<div class="wearer-name">${w.name}</div>
+      <div class="wearer-state ${w.status}">${stateText}</div>
+      <div class="wearer-meta">Last active ${w.lastSeen} · Device ${w.worn ? 'worn' : 'not worn'}</div>`;
+    list.appendChild(card);
+  });
+}
+
+function renderAdvanced() {
+  const list = document.getElementById('advanced-list');
+  list.innerHTML = '';
+  ADVANCED_METRICS.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'metric-row';
+    const val = m.available
+      ? `<div class="metric-value">${m.mock}${m.unit ? ' <span style="font-size:13px;color:var(--text-muted);font-weight:500;">'+m.unit+'</span>' : ''}</div>`
+      : `<div class="metric-value pending">${m.mock}${m.note ? ' — <span style="color:var(--text-dim);">'+m.note+'</span>' : ''}</div>`;
+    row.innerHTML = `<div class="metric-name">${m.name}</div>
+      ${val}
+      <div class="metric-explain">${m.explain}</div>`;
+    list.appendChild(row);
+  });
+}
+
+function renderSelftest() {
+  const list = document.getElementById('selftest-list');
+  list.innerHTML = '';
+  if (state.settings.gamification) {
+    const prog = document.createElement('div');
+    prog.className = 'streak-card';
+    prog.innerHTML = `<div class="streak-icon">🎯</div>
+      <div class="streak-main">
+        <div class="streak-title">This week's progress</div>
+        <div class="streak-sub">${state.streaks.selftest} of 6 tests completed</div>
+      </div>`;
+    list.appendChild(prog);
+  }
+  SELFTESTS.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'card';
+    row.innerHTML = `<div class="card-label">${t.duration}</div>
+      <div style="font-size:17px;font-weight:600;margin:4px 0;">${t.name}</div>
+      <div class="card-detail" style="margin-bottom:8px;"><strong>Why:</strong> ${t.why}</div>
+      <div class="card-detail" style="margin-bottom:12px;"><strong>How:</strong> ${t.how}</div>
+      <button class="btn secondary" onclick="startSelftest('${t.key}')">Start test</button>`;
+    list.appendChild(row);
+  });
+}
+
+function startSelftest(key) {
+  const t = SELFTESTS.find(x => x.key === key);
+  toast('Starting "' + t.name + '" — live test available in v0.3 with firmware v6');
+}
+
+function renderAddInfo() {
+  const list = document.getElementById('addinfo-list');
+  list.innerHTML = `
+    ${state.streaks.logging > 0 && state.settings.gamification ? `
+      <div class="streak-card" style="margin-bottom:16px;">
+        <div class="streak-icon">🔥</div>
+        <div class="streak-main">
+          <div class="streak-title">${state.streaks.logging}-day logging streak</div>
+          <div class="streak-sub">Your doctor will see patterns over time. Thank you!</div>
+        </div>
+      </div>` : ''}
+    <div class="list-item" onclick="openLog('sugar')">
+      <div class="list-item-main">
+        <div class="list-item-title">Blood sugar reading</div>
+        <div class="list-item-sub">Enter your latest reading (mg/dL)</div>
+      </div>
+      <div class="list-item-right">›</div>
+    </div>
+    <div class="list-item" onclick="openLog('mood')">
+      <div class="list-item-main">
+        <div class="list-item-title">Mood check-in</div>
+        <div class="list-item-sub">How are you feeling today?</div>
+      </div>
+      <div class="list-item-right">›</div>
+    </div>
+    <div class="list-item" onclick="openLog('symptoms')">
+      <div class="list-item-main">
+        <div class="list-item-title">Symptoms</div>
+        <div class="list-item-sub">If you feel unwell — pain, dizziness, etc.</div>
+      </div>
+      <div class="list-item-right">›</div>
+    </div>
+    <div class="list-item" onclick="openLog('meds')">
+      <div class="list-item-main">
+        <div class="list-item-title">Medications</div>
+        <div class="list-item-sub">Tick off each medicine as you take it</div>
+      </div>
+      <div class="list-item-right">›</div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+      <div class="card-label">Recent logs</div>
+      ${renderRecentLogs()}
+    </div>`;
+}
+
+function renderRecentLogs() {
+  const parts = [];
+  if (state.logs.sugar.length) {
+    const s = state.logs.sugar.slice(-3).reverse();
+    parts.push('<div style="margin-top:8px;font-weight:600;font-size:14px;">Blood sugar</div>');
+    s.forEach(r => parts.push(`<div class="card-detail">${r.time} — ${r.value} mg/dL</div>`));
+  }
+  if (state.logs.mood.length) {
+    const m = state.logs.mood.slice(-3).reverse();
+    parts.push('<div style="margin-top:12px;font-weight:600;font-size:14px;">Mood</div>');
+    m.forEach(r => parts.push(`<div class="card-detail">${r.date} — ${r.emoji} ${r.label}</div>`));
+  }
+  if (state.logs.symptoms.length) {
+    const s = state.logs.symptoms.slice(-3).reverse();
+    parts.push('<div style="margin-top:12px;font-weight:600;font-size:14px;">Symptoms</div>');
+    s.forEach(r => parts.push(`<div class="card-detail">${r.date} — ${r.tags.join(', ')}</div>`));
+  }
+  return parts.length
+    ? parts.join('')
+    : '<div class="card-detail" style="margin-top:6px;">Nothing logged yet. Tap any option above to start.</div>';
+}
+
+function openLog(kind) {
+  const content = document.getElementById('modal-content');
+  if (kind === 'sugar')    content.innerHTML = sugarModalHTML();
+  if (kind === 'mood')     content.innerHTML = moodModalHTML();
+  if (kind === 'symptoms') content.innerHTML = symptomsModalHTML();
+  if (kind === 'meds')     content.innerHTML = medsModalHTML();
+  document.getElementById('modal-backdrop').classList.add('show');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-backdrop')) return;
+  document.getElementById('modal-backdrop').classList.remove('show');
+}
+
+function sugarModalHTML() {
+  return `<div class="modal-title">Log blood sugar</div>
+    <div class="modal-subtitle">Enter your latest reading in mg/dL.</div>
+    <input class="num-input" type="number" inputmode="numeric" placeholder="120" id="sugar-input" />
+    <button class="btn" onclick="saveSugar()">Save reading</button>
+    <button class="btn ghost" onclick="closeModal({target:document.getElementById('modal-backdrop')})">Cancel</button>`;
+}
+
+function saveSugar() {
+  const v = parseInt(document.getElementById('sugar-input').value);
+  if (!v || v < 20 || v > 600) { toast('Please enter a value between 20 and 600'); return; }
+  const t = new Date();
+  state.logs.sugar.push({
+    time: 'Today ' + t.getHours() + ':' + String(t.getMinutes()).padStart(2,'0'),
+    value: v
+  });
+  state.streaks.logging++;
+  save();
+  closeModal({target: document.getElementById('modal-backdrop')});
+  toast('Blood sugar saved');
+  updateUI();
+  renderAddInfo();
+}
+
+function moodModalHTML() {
+  return `<div class="modal-title">How are you feeling?</div>
+    <div class="modal-subtitle">Tap the one that best describes today.</div>
+    <div class="mood-grid">
+      ${MOODS.map((m,i)=>`<button class="mood-btn" onclick="saveMood(${i})">
+        <span>${m.emoji}</span><span class="label">${m.label}</span></button>`).join('')}
+    </div>
+    <button class="btn ghost" onclick="closeModal({target:document.getElementById('modal-backdrop')})">Cancel</button>`;
+}
+
+function saveMood(idx) {
+  const m = MOODS[idx];
+  const date = new Date().toISOString().slice(0,10);
+  state.logs.mood = state.logs.mood.filter(x => x.date !== date);
+  state.logs.mood.push({ date, emoji: m.emoji, label: m.label });
+  state.streaks.logging++;
+  save();
+  closeModal({target: document.getElementById('modal-backdrop')});
+  toast('Mood logged — thank you');
+  updateUI();
+}
+
+let symptomSelected = new Set();
+function symptomsModalHTML() {
+  symptomSelected = new Set();
+  return `<div class="modal-title">How are you feeling?</div>
+    <div class="modal-subtitle">Tap anything that applies. Tap again to remove.</div>
+    <div class="tag-grid">
+      ${COMMON_SYMPTOMS.map(s => `<button class="tag" onclick="toggleSymptom(this,'${s}')">${s}</button>`).join('')}
+    </div>
+    <button class="btn" onclick="saveSymptoms()">Save</button>
+    <button class="btn ghost" onclick="closeModal({target:document.getElementById('modal-backdrop')})">Cancel</button>`;
+}
+
+function toggleSymptom(el, s) {
+  if (symptomSelected.has(s)) { symptomSelected.delete(s); el.classList.remove('selected'); }
+  else                        { symptomSelected.add(s);    el.classList.add('selected'); }
+}
+
+function saveSymptoms() {
+  if (!symptomSelected.size) { toast('Pick at least one, or tap Cancel'); return; }
+  const date = new Date().toISOString().slice(0,10);
+  state.logs.symptoms.push({ date, tags: Array.from(symptomSelected) });
+  state.streaks.logging++;
+  save();
+  closeModal({target: document.getElementById('modal-backdrop')});
+  toast('Symptoms saved');
+  updateUI();
+}
+
+function medsModalHTML() {
+  const date = new Date().toISOString().slice(0,10);
+  const taken = new Set(state.logs.meds[date] || []);
+  return `<div class="modal-title">Today's medications</div>
+    <div class="modal-subtitle">Tap each one as you take it.</div>
+    ${COMMON_MEDS.map(m => `
+      <div class="check-item ${taken.has(m.name) ? 'checked' : ''}" onclick="toggleMed(this, '${m.name}')">
+        <div class="check-box"></div>
+        <div class="check-item-label">
+          <div>${m.name}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${m.time}</div>
+        </div>
+      </div>`).join('')}
+    <button class="btn" style="margin-top:12px;" onclick="closeModal({target:document.getElementById('modal-backdrop')})">Done</button>`;
+}
+
+function toggleMed(el, name) {
+  const date = new Date().toISOString().slice(0,10);
+  if (!state.logs.meds[date]) state.logs.meds[date] = [];
+  const list = state.logs.meds[date];
+  const i = list.indexOf(name);
+  if (i >= 0) { list.splice(i, 1); el.classList.remove('checked'); }
+  else        { list.push(name);    el.classList.add('checked'); state.streaks.logging++; }
+  save();
+}
+
+async function scanForDevice() {
+  if (!navigator.bluetooth) {
+    toast('Web Bluetooth not available. On iPhone, use Bluefy browser.');
+    return;
+  }
+  try {
+    toast('Scanning for TIGA device…');
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'TIGA' }],
+      optionalServices: ['0000180d-0000-1000-8000-00805f9b34fb'],
+    });
+    state.device = device;
+    state.connected = true;
+    state.mode = 'live';
+    save();
+    toast('Connected to ' + device.name);
+    updateUI();
+    applyRole();
+  } catch(e) {
+    toast('Connection cancelled or failed');
+  }
+}
+
+function triggerSOS() {
+  if (!confirm('Send SOS alert to Aaron and Sarah?')) return;
+  toast('SOS sent (demo — no real message was sent)');
+}
+
+function addContact() {
+  const name = prompt('Contact name:');    if (!name)  return;
+  const phone = prompt('Phone number:');   if (!phone) return;
+  state.contacts.push({ name, phone, primary: false });
+  save(); updateUI(); toast('Contact added');
+}
+
+function addWearer() {
+  const name = prompt('Name of person you look after:'); if (!name) return;
+  state.wearers.push({
+    id: 'w' + (state.wearers.length + 1),
+    name, status:'ok', lastSeen:'just now', falls:0, worn:true, summary:'All is well',
+  });
+  save(); updateUI(); toast('Wearer added');
+}
+
+function exportReport() { showScreen('export'); }
+
+function renderExport() {
+  const el = document.getElementById('export-content');
+  const today = new Date().toLocaleDateString('en-GB',
+    { day:'numeric', month:'long', year:'numeric' });
+
+  el.innerHTML = `
+    <div class="card" style="margin-top:20px;">
+      <div class="card-label">TIGA Health Report</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;">Generated ${today}</div>
+      <div class="card-detail">For sharing with your doctor or medical professional.</div>
+    </div>
+
+    <h3 style="margin:24px 0 12px;font-size:18px;">Current readings</h3>
+    <div class="card">
+      <div class="card-detail">Heart rate: <strong>${state.data.hr} bpm</strong></div>
+      <div class="card-detail">Steps today: <strong>${state.data.steps.toLocaleString()}</strong></div>
+      <div class="card-detail">SpO₂: <strong>${state.data.spo2}%</strong></div>
+      <div class="card-detail">Active time: <strong>${state.data.active} min</strong></div>
+      <div class="card-detail">Device worn: <strong>${state.data.worn ? 'Yes' : 'No'}</strong></div>
+    </div>
+
+    <h3 style="margin:24px 0 12px;font-size:18px;">Advanced readings</h3>
+    ${ADVANCED_METRICS.filter(m => m.available).map(m => `
+      <div class="metric-row">
+        <div class="metric-name">${m.name}</div>
+        <div class="metric-value">${m.mock}${m.unit ? ' ' + m.unit : ''}</div>
+        <div class="metric-explain">${m.explain}</div>
+      </div>`).join('')}
+
+    <h3 style="margin:24px 0 12px;font-size:18px;">Self tests — last results</h3>
+    <div class="card">
+      <div class="card-detail">Self test data will appear here after you complete tests (v0.3).</div>
+    </div>
+
+    <h3 style="margin:24px 0 12px;font-size:18px;">Medical info you logged</h3>
+    ${exportLogsHTML()}
+
+    <h3 style="margin:24px 0 12px;font-size:18px;">Walk history</h3>
+    ${state.history.map(h => `<div class="card-detail">${h.date} ${h.time} — ${h.duration}, ${h.steps.toLocaleString()} steps, ${h.distance}${h.falls?' (fall detected)':''}</div>`).join('')}`;
+}
+
+function exportLogsHTML() {
+  const parts = [];
+  if (state.logs.sugar.length) {
+    parts.push('<div class="card"><div class="card-label">Blood sugar readings</div>');
+    state.logs.sugar.slice(-10).reverse().forEach(r =>
+      parts.push(`<div class="card-detail">${r.time}: ${r.value} mg/dL</div>`));
+    parts.push('</div>');
+  }
+  if (state.logs.mood.length) {
+    parts.push('<div class="card"><div class="card-label">Mood log</div>');
+    state.logs.mood.slice(-10).reverse().forEach(r =>
+      parts.push(`<div class="card-detail">${r.date}: ${r.emoji} ${r.label}</div>`));
+    parts.push('</div>');
+  }
+  if (state.logs.symptoms.length) {
+    parts.push('<div class="card"><div class="card-label">Symptoms log</div>');
+    state.logs.symptoms.slice(-10).reverse().forEach(r =>
+      parts.push(`<div class="card-detail">${r.date}: ${r.tags.join(', ')}</div>`));
+    parts.push('</div>');
+  }
+  const medDays = Object.keys(state.logs.meds || {});
+  if (medDays.length) {
+    parts.push('<div class="card"><div class="card-label">Medication adherence</div>');
+    medDays.slice(-7).forEach(d =>
+      parts.push(`<div class="card-detail">${d}: ${(state.logs.meds[d] || []).length} meds taken</div>`));
+    parts.push('</div>');
+  }
+  return parts.length
+    ? parts.join('')
+    : '<div class="card"><div class="card-detail">No logs yet. Add medical info from the Home screen.</div></div>';
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function init() {
+  load();
+  const h = new Date().getHours();
+  let greeting = 'Good evening';
+  if      (h < 12) greeting = 'Good morning';
+  else if (h < 18) greeting = 'Good afternoon';
+  document.getElementById('home-greeting').textContent = greeting;
+
+  if (state.role) {
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display   = 'flex';
+    applyRole();
+  } else {
+    document.getElementById('login').style.display = 'flex';
+    document.getElementById('app').style.display   = 'none';
+  }
+
+  updateUI();
+  setInterval(mockTick, 2000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
