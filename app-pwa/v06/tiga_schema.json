@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tiga/1",
+  "title": "TIGA record (one reading, shared by firmware v8 and the app)",
+  "description": "Sources: BLE packet (20 bytes, 1 Hz), USB line '[JSON]{...}' every 5 s, flash CSV log every 10 s. Fields not carried by a source are absent, never 0.",
+  "type": "object",
+  "properties": {
+    "t":     {"type": "integer", "description": "Unix epoch ms (app) / seconds in firmware JSON"},
+    "up":    {"type": "integer", "description": "Seconds since watch boot"},
+    "hr":    {"type": "integer", "description": "bpm, 0/absent = no reading"},
+    "spo2":  {"type": "integer", "description": "%, only meaningful when spo2ok=1"},
+    "spo2ok":{"type": "integer", "enum": [0,1]},
+    "steps": {"type": "integer", "description": "Cumulative since boot/session reset"},
+    "alt":   {"type": "number",  "description": "m, relative to start"},
+    "fl":    {"type": "integer", "description": "Floors up"},
+    "fd":    {"type": "integer", "description": "Floors down (USB/CSV only)"},
+    "bat":   {"type": "integer", "description": "%"},
+    "worn":  {"type": "integer", "enum": [0,1]},
+    "falls": {"type": "integer", "description": "Possible falls since boot"},
+    "p":     {"type": "number",  "description": "hPa"},
+    "taps":  {"type": "integer", "description": "Piezo taps since boot"},
+    "g":     {"type": "number",  "description": "Accel magnitude, g (USB/CSV only)"},
+    "bal":   {"type": "integer", "description": "Balance 0-100 (USB/CSV only)"},
+    "gps":   {"type": "integer", "enum": [0,1]},
+    "sats":  {"type": "integer"},
+    "dist":  {"type": "number",  "description": "GPS distance, m (USB/CSV only)"}
+  },
+  "x-ble-packet-v8": {
+    "0":"hr","1":"spo2","2":"spo2ok","3-4":"steps u16","5-6":"alt*10 i16","7":"fl","8":"bat","9":"worn","10":"falls","11":"stable","12":"gps","13":"sats","14-15":"p*10 u16","16":"protocol version (8)","17-18":"taps u16","19":"status bits: b0 MPU b1 MAX b2 BMP b3 piezo b4 flash log"
+  },
+  "x-csv-columns": "up_s,epoch,hr,spo2,steps,alt_m,floors_up,floors_down,bat,worn,falls,p_hpa,taps,accel_g,balance,gps_fix,sats,dist_m"
+}

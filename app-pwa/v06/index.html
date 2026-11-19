@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="en" data-mode="light" data-size="normal">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TIGA</title>
+<meta name="description" content="TIGA companion app: simple health readings from your TIGA wearable, with family alerts.">
+<meta name="theme-color" content="#0f6e6e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script>
+/* apply saved theme before first paint (no flash) */
+(function(){try{var s=JSON.parse(localStorage.getItem('tiga.settings')||'{}');var m=s.mode||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+document.documentElement.dataset.mode=m;document.documentElement.dataset.size=s.size||'normal';}catch(e){}})();
+</script>
+<style>
+:root{
+  --bg:#f6f4ef;--surface:#ffffff;--surface2:#f0ede6;--ink:#1d2330;--muted:#566070;--line:#ddd8cc;
+  --accent:#0f6e6e;--accent-ink:#ffffff;--accent-soft:#dcefee;
+  --good:#1b7a4a;--good-soft:#dff3e8;--warn:#9a5a00;--warn-soft:#fbecd0;--bad:#b3261e;--bad-soft:#fbdedb;
+  --sos:#c62828;--shadow:0 1px 2px rgba(20,25,35,.08),0 4px 14px rgba(20,25,35,.06);
+  --fs:17px;--tap:48px;--r:18px;--gap:14px;
+}
+:root[data-mode="dark"]{
+  --bg:#10151b;--surface:#19202a;--surface2:#222b37;--ink:#eef1f5;--muted:#a7b2c0;--line:#2c3744;
+  --accent:#55c7c4;--accent-ink:#06222a;--accent-soft:#17343a;
+  --good:#63d596;--good-soft:#173826;--warn:#f2b552;--warn-soft:#3b2e12;--bad:#ff8f86;--bad-soft:#431d1a;
+  --sos:#e5484d;--shadow:0 1px 2px rgba(0,0,0,.4);
+}
+:root[data-size="large"]{--fs:21.5px;--tap:60px;--r:22px;--gap:18px}
+*{box-sizing:border-box}
+html{font-size:var(--fs);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.45;padding-bottom:calc(5.2rem + env(safe-area-inset-bottom))}
+h1,h2,h3{line-height:1.2;margin:0}
+h1{font-size:1.5rem}h2{font-size:1.2rem}h3{font-size:1.05rem}
+p{margin:.4rem 0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:8px}
+.skip{position:absolute;left:-999px;top:0;background:var(--accent);color:var(--accent-ink);padding:.6rem 1rem;z-index:100}
+.skip:focus{left:8px;top:8px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* header */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem max(16px,env(safe-area-inset-left)) .55rem max(16px,env(safe-area-inset-right));background:var(--bg);border-bottom:1px solid var(--line)}
+.who{display:flex;align-items:center;gap:.6rem;background:none;border:0;padding:.2rem;min-height:var(--tap);text-align:left;min-width:0}
+.avatar{width:2.4rem;height:2.4rem;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;overflow:hidden;flex:none}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.who span.n{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+.top-right{display:flex;align-items:center;gap:.5rem}
+.conn{display:flex;align-items:center;gap:.4rem;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:.3rem .7rem;min-height:2.4rem;font-size:.8rem}
+.dot{width:.65rem;height:.65rem;border-radius:50%;background:var(--muted)}
+.conn[data-s="live"] .dot{background:var(--good)}
+.conn[data-s="demo"] .dot{background:var(--warn)}
+.conn[data-s="wait"] .dot{background:var(--warn)}
+.sos{position:relative;width:2.7rem;height:2.7rem;border-radius:50%;border:2px solid var(--sos);background:var(--surface);color:var(--sos);font-weight:800;font-size:.72rem;display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.sos svg{position:absolute;inset:-2px;width:calc(100% + 4px);height:calc(100% + 4px);transform:rotate(-90deg);pointer-events:none}
+.sos circle{fill:none;stroke:var(--sos);stroke-width:4;stroke-dasharray:100;stroke-dashoffset:100}
+.sos.holding{background:var(--sos);color:#fff}
+.sos.holding circle{stroke:#fff}
+
+/* layout */
+main{max-width:680px;margin:0 auto;padding:var(--gap) 16px}
+.screen{display:none}.screen.active{display:block}
+.stack>*+*{margin-top:var(--gap)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:1rem;box-shadow:var(--shadow)}
+.card>h2+*,.card>h3+*{margin-top:.5rem}
+.muted{color:var(--muted)}.small{font-size:.82rem}
+.row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.row.between{justify-content:space-between}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.page-title{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.2rem .8rem;margin:.2rem 0 var(--gap)}
+.banner{max-width:680px;margin:.5rem auto 0;padding:.55rem 1rem;border-radius:12px;background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn);font-size:.88rem;display:none}
+.banner.show{display:block}
+.banner.bad{background:var(--bad-soft);border-color:var(--bad)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:var(--tap);padding:.5rem 1.1rem;border-radius:14px;border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:650}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.sm{min-height:2.5rem;padding:.3rem .8rem;font-size:.9rem}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.block{width:100%}
+.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:999px;padding:.15rem .6rem;font-size:.78rem;font-weight:650;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--good-soft);color:var(--good)}
+.chip.watch{background:var(--warn-soft);color:var(--warn)}
+.chip.alert{background:var(--bad-soft);color:var(--bad)}
+.chip.src{background:var(--accent-soft);color:var(--accent)}
+.seg{display:flex;gap:.4rem;flex-wrap:wrap}
+.seg button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:.3rem .9rem;min-height:2.5rem}
+.seg button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:650}
+
+/* info icon */
+.info-btn{display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:50%;border:1.5px solid var(--muted);background:none;color:var(--muted);font-size:.8rem;font-weight:700;font-style:italic;font-family:Georgia,serif;position:relative;flex:none;padding:0}
+.info-btn::after{content:"";position:absolute;inset:-.6rem}
+.info-btn[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.explain{margin:.5rem 0 0;padding:.6rem .8rem;border-radius:12px;background:var(--surface2);font-size:.9rem}
+
+/* status */
+.status{display:flex;gap:.8rem;align-items:center}
+.status .badge{width:3.2rem;height:3.2rem;border-radius:50%;display:grid;place-items:center;font-size:1.5rem;flex:none}
+.status.ok{background:var(--good-soft)}.status.ok .badge{background:var(--good);color:#fff}
+.status.watch{background:var(--warn-soft)}.status.watch .badge{background:var(--warn);color:#fff}
+.status.alert{background:var(--bad-soft)}.status.alert .badge{background:var(--bad);color:#fff}
+.status.na{background:var(--surface2)}.status.na .badge{background:var(--muted);color:var(--bg)}
+.status h2{font-size:1.25rem}
+
+/* tiles */
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:.9rem;box-shadow:var(--shadow);min-width:0}
+.tile .lab{display:flex;justify-content:space-between;align-items:center;gap:.4rem;color:var(--muted);font-size:.85rem;font-weight:600}
+.tile .val{font-size:1.55rem;font-weight:750;margin-top:.25rem;line-height:1.15;word-break:break-word}
+.tile .val small{font-size:.8rem;font-weight:600;color:var(--muted)}
+.tile .sub{font-size:.8rem;color:var(--muted);margin-top:.15rem}
+.tile .explain{grid-column:1/-1}
+
+/* charts */
+.chart{width:100%;height:auto;display:block;margin-top:.4rem}
+.chart .ax{stroke:var(--line);stroke-width:1}
+.chart .ln{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.chart .bar{fill:var(--accent);opacity:.85}
+.chart text{fill:var(--muted);font-size:9px}
+.bigtap{font-size:3rem;font-weight:800;text-align:center;padding:.5rem}
+.bigtap.pulse{animation:pulse .5s}
+@keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+/* lists, forms */
+details.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+details.acc>summary{list-style:none;padding:1rem;font-weight:700;display:flex;justify-content:space-between;align-items:center;min-height:var(--tap);cursor:pointer}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:"+";font-size:1.4rem;color:var(--muted)}
+details.acc[open]>summary::after{content:"–"}
+details.acc>.in{padding:0 1rem 1rem}
+.tcard{border-top:1px solid var(--line);padding:.8rem 0}
+.tcard:first-child{border-top:0}
+.tcard .t1{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start}
+.tcard .t1 .nm{font-weight:650}
+.tcard .res{margin-top:.25rem}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.15rem .8rem;font-size:.85rem;margin-top:.4rem}
+.kv dt{color:var(--muted)}.kv dd{margin:0;word-break:break-word}
+label.f{display:block;font-weight:600;font-size:.88rem;margin:.7rem 0 .2rem}
+input[type=text],input[type=date],input[type=tel],input[type=password],select,textarea{width:100%;min-height:var(--tap);border:1.5px solid var(--line);border-radius:12px;background:var(--surface);padding:.5rem .75rem}
+textarea{min-height:5.5rem;resize:vertical}
+.themes{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.themes button{border:2px solid var(--line);border-radius:14px;padding:.7rem;min-height:var(--tap);background:var(--surface);text-align:left;display:flex;flex-direction:column;gap:.2rem}
+.themes button[aria-pressed="true"]{border-color:var(--accent)}
+.sw{height:1.2rem;border-radius:6px;border:1px solid var(--line)}
+.logl{font-size:.8rem;border-top:1px solid var(--line);padding:.35rem 0;display:flex;gap:.6rem}
+.logl time{color:var(--muted);flex:none}
+.note{border-top:1px solid var(--line);padding:.55rem 0;font-size:.92rem}
+.note:first-child{border-top:0}
+.mood{display:flex;gap:.5rem}
+.mood button{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:14px;min-height:var(--tap);font-size:1.4rem}
+.mood button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+
+/* nav */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:.1rem;padding:.5rem .2rem;min-height:4.2rem;color:var(--muted);font-size:.75rem;font-weight:600}
+.tabs button svg{width:1.6rem;height:1.6rem;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tabs button[aria-current="page"]{color:var(--accent)}
+.tabs button[aria-current="page"] svg{stroke-width:2.4}
+
+/* dialog + toast */
+dialog{border:0;border-radius:22px;padding:0;max-width:min(560px,94vw);width:100%;background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+dialog::backdrop{background:rgba(10,14,20,.6)}
+dialog .dh{padding:1.1rem 1.2rem .2rem}
+dialog .db{padding:.4rem 1.2rem;max-height:62vh;overflow:auto}
+dialog .da{padding:.8rem 1.2rem 1.2rem;display:flex;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+#toast{position:fixed;left:50%;bottom:calc(5.6rem + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:.6rem 1.1rem;border-radius:12px;font-size:.9rem;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60}
+#toast.show{opacity:1}
+.bigzone{display:grid;place-items:center;min-height:12rem;border-radius:18px;background:var(--surface2);font-size:1.4rem;font-weight:700;text-align:center;padding:1rem;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.bigzone.go{background:var(--good);color:#fff}
+.bigzone.wait{background:var(--bad);color:#fff}
+#printArea{display:none}
+@media print{body>*:not(#printArea){display:none!important}#printArea{display:block!important;color:#000;background:#fff;padding:0}#printArea table{border-collapse:collapse;width:100%;font-size:11px}#printArea td,#printArea th{border:1px solid #999;padding:3px 5px;text-align:left}#printArea h1,#printArea h2{margin:.6em 0 .3em}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media (max-width:380px){.grid2{grid-template-columns:1fr}.who span.n{max-width:22vw}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <button class="who" id="whoBtn" aria-label="Open my profile">
+    <span class="avatar" id="avatar" aria-hidden="true">T</span>
+    <span class="n" id="whoName">TIGA</span>
+  </button>
+  <div class="top-right">
+    <button class="conn" id="connChip" data-s="off" aria-label="Connection status. Open connection settings"><span class="dot" aria-hidden="true"></span><span id="connText">Not connected</span></button>
+    <button class="sos" id="sos" aria-label="Emergency SOS. Press and hold for two seconds to send an alert.">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle id="sosRing" cx="18" cy="18" r="16" pathLength="100"/></svg>
+      <span>SOS</span>
+    </button>
+  </div>
+</header>
+<div class="banner" id="banner" role="status"></div>
+
+<main id="main" tabindex="-1">
+
+<!-- ============ TODAY ============ -->
+<section class="screen active stack" id="s-today" aria-labelledby="h-today">
+  <div class="page-title"><h1 id="h-today">How am I doing?</h1><span class="small muted" id="todayDate"></span></div>
+  <div id="setupCard"></div>
+  <div class="card status na" id="statusCard" aria-live="polite">
+    <div class="badge" id="stBadge" aria-hidden="true">·</div>
+    <div><h2 id="stTitle">Waiting for the watch</h2><p class="muted" id="stWhy">Connect your TIGA in System, or try demo mode.</p></div>
+  </div>
+  <div class="grid2" id="tiles">
+    <div class="tile"><div class="lab"><span>Heart</span><button class="info-btn" data-info="i-hr" aria-expanded="false" aria-controls="i-hr" aria-label="What is heart rate?">i</button></div>
+      <div class="val">HR = <span data-v="hr">—</span> <small>bpm</small></div><div class="sub" data-v="hrsub"></div></div>
+    <div class="tile"><div class="lab"><span>Oxygen</span><button class="info-btn" data-info="i-sp" aria-expanded="false" aria-controls="i-sp" aria-label="What is SpO2?">i</button></div>
+      <div class="val">SpO2 = <span data-v="spo2">—</span><small>%</small></div><div class="sub" data-v="spsub"></div></div>
+    <div class="tile"><div class="lab"><span>Steps today</span><button class="info-btn" data-info="i-st" aria-expanded="false" aria-controls="i-st" aria-label="What are steps?">i</button></div>
+      <div class="val"><span data-v="steps">—</span></div><div class="sub" data-v="stsub"></div></div>
+    <div class="tile"><div class="lab"><span>Active time</span><button class="info-btn" data-info="i-ac" aria-expanded="false" aria-controls="i-ac" aria-label="What is active time?">i</button></div>
+      <div class="val"><span data-v="act">—</span> <small>min</small></div><div class="sub" data-v="acsub"></div></div>
+  </div>
+  <p class="explain" id="i-hr" hidden>Heart rate (HR) is how many times your heart beats in a minute. Most adults are between 60 and 100 when resting. It goes up when you walk, climb stairs or feel stressed. Keep the watch snug and still for a good reading.</p>
+  <p class="explain" id="i-sp" hidden>SpO2 shows how much oxygen your blood is carrying. 95 to 100 is typical. Cold hands or a loose watch can make it read low. If you feel unwell, or it stays under 92, tell your doctor.</p>
+  <p class="explain" id="i-st" hidden>Steps are counted by the watch's motion sensor. The count starts again each morning. Short walks add up, so any number is good.</p>
+  <p class="explain" id="i-ac" hidden>Active time is the number of minutes you were walking briskly or climbing. Gentle movement around the house is counted in steps but not here.</p>
+
+  <div class="card">
+    <h2>Check in with family</h2>
+    <p class="muted small" id="tgState">Family updates are not set up yet.</p>
+    <div class="row" style="margin-top:.6rem">
+      <button class="btn" id="btnSendUpdate">Send an update now</button>
+      <span class="small muted" id="lastReq"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Session notes</h2>
+    <p class="muted small">How are you feeling? A quick note helps your family and your doctor.</p>
+    <div class="mood" role="group" aria-label="How are you feeling?" style="margin-top:.5rem">
+      <button data-mood="good" aria-pressed="false" aria-label="Feeling good">😀</button>
+      <button data-mood="ok" aria-pressed="false" aria-label="Feeling okay">😐</button>
+      <button data-mood="low" aria-pressed="false" aria-label="Not feeling great">😟</button>
+    </div>
+    <label class="f" for="noteText">Anything to add?</label>
+    <textarea id="noteText" placeholder="For example: slept badly, walked to the shop, felt dizzy on the stairs"></textarea>
+    <div class="row" style="margin-top:.6rem"><button class="btn" id="btnAddNote">Save note</button></div>
+    <div id="noteList" style="margin-top:.6rem"></div>
+  </div>
+  <p class="small muted">TIGA is a wellness tracker, not a medical device. If you feel unwell, call your doctor or emergency services.</p>
+</section>
+
+<!-- ============ READINGS ============ -->
+<section class="screen stack" id="s-read" aria-labelledby="h-read">
+  <div class="page-title"><h1 id="h-read">My readings</h1></div>
+  <div class="seg" role="group" aria-label="Time range" id="rangeSeg">
+    <button data-r="1h" aria-pressed="true">Last hour</button>
+    <button data-r="day" aria-pressed="false">Today</button>
+  </div>
+  <div id="reviewBar"></div>
+  <div id="charts" class="stack"></div>
+</section>
+
+<!-- ============ SESSION ============ -->
+<section class="screen stack" id="s-session" aria-labelledby="h-sess">
+  <div class="page-title"><h1 id="h-sess">My session</h1></div>
+  <div class="card">
+    <div class="row between"><h2>Session</h2><span class="chip" id="sessChip">Not started</span></div>
+    <div class="bigtap" id="sessTimer" aria-live="off">00:00</div>
+    <div class="row" style="justify-content:center"><button class="btn" id="btnSess">Start session</button></div>
+    <div id="sessSummary" class="small muted" style="margin-top:.6rem"></div>
+  </div>
+  <h2>My health checks</h2>
+  <p class="muted small">Each check tells you what it is, what it found, and whether to keep an eye on it. Tap the <em>i</em> for a plain-English explanation.</p>
+  <div id="agnesTests" class="stack"></div>
+</section>
+
+<!-- ============ SYSTEM ============ -->
+<section class="screen stack" id="s-system" aria-labelledby="h-sys">
+  <div class="page-title"><h1 id="h-sys">System</h1><span class="small muted">App v2.0 · schema tiga/1</span></div>
+  <div id="sysBody" class="stack"></div>
+</section>
+
+</main>
+
+<nav class="tabs" aria-label="Main">
+  <button data-go="today" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Today</button>
+  <button data-go="read"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Readings</button>
+  <button data-go="session"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v2h6V4M9 12l2 2 4-4"/></svg>Session</button>
+  <button data-go="system"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>System</button>
+</nav>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="dlg" aria-labelledby="dlgTitle"><div class="dh"><h2 id="dlgTitle"></h2></div><div class="db" id="dlgBody"></div><div class="da" id="dlgActions"></div></dialog>
+<div id="printArea" aria-hidden="true"></div>
+<script>
+'use strict';
+/* ============================================================
+   TIGA companion app v2
+   Data contract ("tiga/1"): every source (BLE packet, USB JSON line,
+   saved CSV log, demo) is normalised to one record:
+   {t,dt,sd,hr,spo2,alt,fl,fd,p,worn,falls,taps,g,bal,gps,sats,dist,bat}
+   t=ms epoch, dt=seconds since previous row, sd=steps since previous row.
+   Missing fields are undefined (never 0) so the UI can say "not measured".
+   ============================================================ */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mem={};
+const store={
+  get(k,d){try{const v=localStorage.getItem('tiga.'+k);if(v!=null)return JSON.parse(v);}catch(e){} return k in mem?mem[k]:d;},
+  set(k,v){mem[k]=v;try{localStorage.setItem('tiga.'+k,JSON.stringify(v));return true;}catch(e){return false;}},
+  del(k){delete mem[k];try{localStorage.removeItem('tiga.'+k);}catch(e){}}
+};
+const pad=n=>String(n).padStart(2,'0');
+const dayKey=t=>{const d=new Date(t);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());};
+const fmtT=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes());};
+const fmtDT=t=>dayKey(t)+' '+fmtT(t);
+const fmtDur=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+' h '+pad(m)+' min':m+' min';};
+const has=v=>v!==undefined&&v!==null&&!Number.isNaN(v);
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+const median=a=>{if(!a.length)return NaN;const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+const nfmt=n=>has(n)?Number(n).toLocaleString():'—';
+
+/* ---------- toast + modal (no alert/confirm/prompt anywhere) ---------- */
+let toastT;
+function toast(msg,ms=3500){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),ms);}
+function modal({title,html='',node=null,actions=[{label:'OK',kind:'primary',value:'ok'}],onOpen=null}){
+  return new Promise(res=>{
+    const d=$('#dlg');$('#dlgTitle').textContent=title;
+    const b=$('#dlgBody');b.innerHTML=html;if(node)b.appendChild(node);
+    const a=$('#dlgActions');a.innerHTML='';
+    let done=false;const finish=v=>{if(done)return;done=true;d.onclose=null;if(modal.cleanup){modal.cleanup();modal.cleanup=null;}try{d.close();}catch(e){}res(v);};
+    actions.forEach(ac=>{const btn=document.createElement('button');btn.className='btn '+(ac.kind==='primary'?'':ac.kind==='danger'?'danger':'ghost');btn.textContent=ac.label;
+      btn.addEventListener('click',()=>{if(ac.onClick&&ac.onClick(b,finish)===false)return;finish(ac.value);});a.appendChild(btn);});
+    d.onclose=()=>{if(d.open)return;if(!done){done=true;if(modal.cleanup){modal.cleanup();modal.cleanup=null;}res(null);}};
+    d.oncancel=()=>{};
+    try{d.showModal();}catch(e){d.setAttribute('open','');}
+    if(onOpen)onOpen(b,finish);
+  });
+}
+const ask=(title,text,yes='Yes',no='Cancel',danger=false)=>modal({title,html:'<p>'+esc(text)+'</p>',actions:[{label:no,kind:'ghost',value:false},{label:yes,kind:danger?'danger':'primary',value:true}]}).then(v=>v===true);
+
+/* ---------- event log ---------- */
+const LOG=store.get('log',[]);
+function logEv(type,msg){LOG.unshift({t:Date.now(),type,msg});if(LOG.length>400)LOG.length=400;store.set('log',LOG);if(window.renderLog)renderLog();}
+
+/* ---------- settings / theme ---------- */
+const settings=Object.assign({mode:null,size:'normal',tgToken:'',tgChat:'',tgPoll:true,tgOffset:0,alerts:true},store.get('settings',{}));
+const saveSettings=()=>store.set('settings',settings);
+function applyTheme(){
+  const mode=settings.mode||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.dataset.mode=mode;document.documentElement.dataset.size=settings.size||'normal';
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=mode==='dark'?'#10151b':'#0f6e6e';
+}
+function setTheme(mode,size){settings.mode=mode;settings.size=size;saveSettings();applyTheme();if(window.renderSystem)renderSystem();}
+
+/* ---------- profile ---------- */
+const DEFAULT_PROFILE={name:'',photo:'',dob:'',doctorName:'',doctorPhone:'',ecName:'',ecPhone:'',ecRelation:'',bitchat:'',medical:'',allergies:'',conditions:''};
+let profile=Object.assign({},DEFAULT_PROFILE,store.get('profile',{}));
+const ageOf=dob=>{if(!dob)return null;const b=new Date(dob);if(isNaN(b))return null;const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a;};
+const firstName=()=>(profile.name||'').trim().split(/\s+/)[0]||'';
+function renderWho(){
+  const nm=profile.name||'TIGA';$('#whoName').textContent=firstName()||'My profile';
+  const av=$('#avatar');av.innerHTML='';
+  if(profile.photo){const i=new Image();i.alt='';i.src=profile.photo;av.appendChild(i);}else av.textContent=(nm[0]||'T').toUpperCase();
+}
+
+/* ============================================================
+   DATA LAYER
+   ============================================================ */
+const SVC='4fafc201-1fb5-459e-8fcc-c5c9c331914b', CHR='beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const S={mode:'off',live:null,lastT:0,dev:{ver:0,status:0},falls0:null};   // mode: off|ble|usb|demo
+const H=[];const MAXH=21600;let prevSteps=null;
+let review=null;        // imported CSV dataset {name,rows}
+
+function parsePacket(dv){
+  if(dv.byteLength<16)return null;
+  const u=i=>dv.getUint8(i);
+  const rec={hr:u(0)||undefined,spo2:(u(2)&&u(1))?u(1):undefined,steps:dv.getUint16(3,true),alt:dv.getInt16(5,true)/10,fl:u(7),bat:u(8),worn:u(9),falls:u(10),stable:u(11),gps:u(12),sats:u(13),p:dv.getUint16(14,true)/10};
+  if(dv.byteLength>=20){S.dev.ver=u(16);rec.taps=dv.getUint16(17,true);S.dev.status=u(19);}
+  return rec;
+}
+function normJSON(o){            // USB "[JSON]{...}" line from firmware v8
+  return {hr:o.hr>0?o.hr:undefined,spo2:(o.spo2ok&&o.spo2>0)?o.spo2:undefined,steps:o.steps|0,alt:o.alt,fl:o.fl,fd:o.fd,bat:o.bat,worn:o.worn,falls:o.falls,p:o.p,taps:o.taps,g:o.g,bal:o.bal,gps:o.gps,sats:o.sats,dist:o.dist,ir:o.ir};
+}
+
+/* ---------- 5-minute buckets (persisted per day) ---------- */
+let cur=null;
+const BUCKET_MS=300000;
+function newBucket(t){return {t0:t-(t%BUCKET_MS),hrS:0,hrN:0,hrMin:999,hrMax:0,spS:0,spN:0,sd:0,act:0,alt:0,fl:0,p:0,bat:0,wornN:0,n:0,falls:0,taps:0,mi:-1,msd:0};}
+function closeBucket(b){
+  if(!b||!b.n||S.mode==='demo')return;   // demo data is never saved
+  const o={t:b.t0,sd:b.sd,act:b.act,hr:b.hrN?b.hrS/b.hrN:null,hrN:b.hrN,hrMin:b.hrN?b.hrMin:null,hrMax:b.hrN?b.hrMax:null,spo2:b.spN?b.spS/b.spN:null,alt:b.alt,fl:b.fl,p:b.p,bat:b.bat,worn:b.wornN/b.n,falls:b.falls,taps:b.taps};
+  const k='d.'+dayKey(b.t0);const arr=store.get(k,[]);const i=arr.findIndex(x=>x.t===o.t);if(i>=0)arr[i]=o;else arr.push(o);
+  if(!store.set(k,arr))pruneDays(true);
+  const days=store.get('days',[]);const dk=dayKey(b.t0);if(!days.includes(dk)){days.push(dk);days.sort();while(days.length>40){store.del('d.'+days.shift());}store.set('days',days);}
+}
+function pruneDays(force){const days=store.get('days',[]);if(days.length>7||force){const d=days.shift();if(d)store.del('d.'+d);store.set('days',days);}}
+function bucketAdd(r){
+  if(!cur)cur=newBucket(r.t);
+  if(r.t>=cur.t0+BUCKET_MS){closeBucket(cur);cur=newBucket(r.t);}
+  cur.n++;cur.sd+=r.sd;if(has(r.hr)){cur.hrS+=r.hr;cur.hrN++;cur.hrMin=Math.min(cur.hrMin,r.hr);cur.hrMax=Math.max(cur.hrMax,r.hr);}
+  if(has(r.spo2)){cur.spS+=r.spo2;cur.spN++;}
+  if(has(r.alt))cur.alt=r.alt;if(has(r.fl))cur.fl=r.fl;if(has(r.p))cur.p=r.p;if(has(r.bat))cur.bat=r.bat;if(r.worn)cur.wornN++;
+  if(has(r.falls))cur.falls=r.falls;if(has(r.taps))cur.taps=r.taps;
+  const mi=Math.floor(r.t/60000);if(mi!==cur.mi){if(cur.mi>=0&&cur.msd>=40)cur.act++;cur.mi=mi;cur.msd=0;}cur.msd+=r.sd;
+}
+const dayBuckets=d=>store.get('d.'+d,[]);
+function bucketRows(arr){return arr.map(b=>({t:b.t+BUCKET_MS,dt:300,sd:b.sd,hr:b.hr||undefined,spo2:b.spo2||undefined,alt:b.alt,fl:b.fl,p:b.p,bat:b.bat,worn:b.worn>0.5?1:0,falls:b.falls,taps:b.taps,agg:true}));}
+function daySummary(d){
+  const arr=dayBuckets(d).slice();
+  if(cur&&dayKey(cur.t0)===d&&cur.n){closeBucketPreview(arr);}
+  const s={date:d,steps:0,act:0,hrAvg:null,hrMin:null,hrMax:null,spo2:null,fl:0,falls:0,wornPct:null,bat:null,p:null};
+  let hs=0,hn=0,ss=0,sn=0,w=0,n=0;
+  arr.forEach(b=>{s.steps+=b.sd;s.act+=b.act;if(b.hrN){hs+=b.hr*b.hrN;hn+=b.hrN;s.hrMin=s.hrMin==null?b.hrMin:Math.min(s.hrMin,b.hrMin);s.hrMax=s.hrMax==null?b.hrMax:Math.max(s.hrMax,b.hrMax);}
+    if(b.spo2){ss+=b.spo2;sn++;}s.fl=Math.max(s.fl,b.fl||0);s.falls=Math.max(s.falls,b.falls||0);w+=b.worn;n++;s.bat=b.bat;s.p=b.p;});
+  if(hn)s.hrAvg=hs/hn;if(sn)s.spo2=ss/sn;if(n)s.wornPct=Math.round(100*w/n);
+  return s;
+}
+function closeBucketPreview(arr){const b=cur;arr.push({t:b.t0,sd:b.sd,act:b.act,hr:b.hrN?b.hrS/b.hrN:null,hrN:b.hrN,hrMin:b.hrN?b.hrMin:null,hrMax:b.hrN?b.hrMax:null,spo2:b.spN?b.spS/b.spN:null,alt:b.alt,fl:b.fl,p:b.p,bat:b.bat,worn:b.wornN/b.n,falls:b.falls,taps:b.taps});}
+const todaySteps=()=>daySummary(dayKey(Date.now())).steps;
+function todayRows(){
+  const d=dayKey(Date.now());const rows=bucketRows(dayBuckets(d));const t0=cur?cur.t0:Date.now();
+  H.forEach(r=>{if(r.t>=t0)rows.push(r);});return rows;
+}
+function flushNow(){if(cur&&cur.n){closeBucket(cur);}}
+
+/* ---------- ingest ---------- */
+function ingest(rec,src){
+  const t=Date.now();const last=H[H.length-1];
+  let sd=0;if(prevSteps!=null&&has(rec.steps)){sd=rec.steps>=prevSteps?rec.steps-prevSteps:rec.steps;if(sd>300)sd=0;}
+  if(has(rec.steps))prevSteps=rec.steps;
+  const row=Object.assign({t,dt:last?Math.min(600,(t-last.t)/1000):1,sd},rec);
+  H.push(row);if(H.length>MAXH)H.shift();
+  S.live=row;S.lastT=t;
+  bucketAdd(row);checkEvents(row);
+  if(window.onLive)onLive();
+}
+function setMode(m){S.mode=m;if(window.renderConn)renderConn();}
+
+/* ---------- events / alerts ---------- */
+const cool={};let hrBadSince=0;
+function raiseAlert(kind,text,force){
+  const now=Date.now();if(!force&&cool[kind]&&now-cool[kind]<600000)return;cool[kind]=now;
+  logEv('alert',text);toast('⚠ '+text,6000);try{navigator.vibrate&&navigator.vibrate([300,150,300]);}catch(e){}
+  if(settings.alerts)tgSend('⚠ '+(firstName()||'TIGA wearer')+': '+text+'\n'+statusText());
+  if(window.refreshStatus)refreshStatus();
+}
+function checkEvents(r){
+  if(has(r.falls)){if(S.falls0==null)S.falls0=r.falls;else if(r.falls>S.falls0){S.falls0=r.falls;raiseAlert('fall','Possible fall detected by the watch.',true);}}
+  if(r.worn&&has(r.hr)&&(r.hr>150||r.hr<40)){if(!hrBadSince)hrBadSince=r.t;if(r.t-hrBadSince>30000)raiseAlert('hr','Heart rate has been '+(r.hr>150?'very high ('+r.hr+')':'very low ('+r.hr+')')+' for 30 seconds.');}else hrBadSince=0;
+  if(has(r.bat)&&r.bat<=15&&r.bat>0)raiseAlert('bat','Watch battery is low ('+r.bat+'%).');
+}
+
+/* ---------- Bluetooth ---------- */
+let bleDev=null,bleChar=null,bleTries=0,bleWatch=null;
+const bleOK=()=>!!navigator.bluetooth;
+async function bleConnect(){
+  if(!bleOK()){await modal({title:'Bluetooth not available',html:'<p>This browser cannot use Bluetooth for web pages.</p><p>On iPhone, install the free <strong>Bluefy</strong> browser and open this page there. On Android or a computer, use Chrome or Edge.</p>'});return;}
+  try{
+    stopDemo();
+    bleDev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'TIGA'}],optionalServices:[SVC]});
+    bleDev.addEventListener('gattserverdisconnected',onBleDrop);
+    bleTries=0;await bleOpen();
+  }catch(e){if(e&&e.name!=='NotFoundError'){logEv('ble','Connect failed: '+(e.message||e));toast('Could not connect: '+(e.message||e));}}
+}
+async function bleOpen(){
+  setMode('off');const c=$('#connText');if(c)c.textContent='Connecting…';
+  const srv=await bleDev.gatt.connect();const svc=await srv.getPrimaryService(SVC);bleChar=await svc.getCharacteristic(CHR);
+  await bleChar.startNotifications();bleChar.addEventListener('characteristicvaluechanged',ev=>{const rec=parsePacket(ev.target.value);if(rec)ingest(rec,'ble');});
+  prevSteps=null;S.falls0=null;setMode('ble');logEv('ble','Connected to '+(bleDev.name||'TIGA'));toast('Connected to your TIGA');
+  clearInterval(bleWatch);bleWatch=setInterval(()=>{if(S.mode==='ble'&&Date.now()-S.lastT>8000)renderConn();},3000);
+}
+async function onBleDrop(){
+  setMode('off');logEv('ble','Bluetooth connection lost');
+  if(bleTries<6){bleTries++;const w=Math.min(15000,1500*bleTries);setTimeout(async()=>{try{if(bleDev&&!bleDev.gatt.connected)await bleOpen();}catch(e){onBleDrop();}},w);}
+  else toast('Bluetooth connection lost. Tap the connection chip to reconnect.');
+}
+function bleDisconnect(){bleTries=99;try{bleDev&&bleDev.gatt.connected&&bleDev.gatt.disconnect();}catch(e){}setMode('off');}
+
+/* ---------- USB (Web Serial): live JSON + CSV log download ---------- */
+let port=null,reader=null,serBuf='',capture=null;
+const serialOK=()=>!!navigator.serial;
+async function usbConnect(){
+  if(!serialOK()){await modal({title:'USB not available',html:'<p>USB needs desktop <strong>Chrome</strong> or <strong>Edge</strong>. Phones cannot do this yet.</p>'});return false;}
+  try{
+    stopDemo();port=await navigator.serial.requestPort();await port.open({baudRate:115200});
+    setMode('usb');logEv('usb','USB connected');prevSteps=null;S.falls0=null;readLoop();return true;
+  }catch(e){if(e&&e.name!=='NotFoundError')toast('USB: '+(e.message||e));return false;}
+}
+async function readLoop(){
+  const dec=new TextDecoder();
+  try{
+    while(port&&port.readable){
+      reader=port.readable.getReader();
+      try{for(;;){const {value,done}=await reader.read();if(done)break;serBuf+=dec.decode(value,{stream:true});let i;while((i=serBuf.indexOf('\n'))>=0){const line=serBuf.slice(0,i).replace(/\r$/,'');serBuf=serBuf.slice(i+1);onSerialLine(line);}}}
+      finally{reader.releaseLock();}
+    }
+  }catch(e){logEv('usb','USB read ended: '+(e.message||e));}
+  setMode('off');
+}
+function onSerialLine(line){
+  if(capture){
+    if(line.startsWith('=== TIGA LOG END')){const c=capture;capture=null;c.done();return;}
+    if(!line.startsWith('=== TIGA LOG BEGIN'))capture.lines.push(line);return;
+  }
+  if(line.startsWith('=== TIGA LOG BEGIN')){return;}
+  if(line.startsWith('[JSON]')){try{ingest(normJSON(JSON.parse(line.slice(6))),'usb');}catch(e){}}
+}
+async function usbDownloadLog(){
+  if(!port||!port.writable){const ok=await usbConnect();if(!ok)return;await new Promise(r=>setTimeout(r,800));}
+  toast('Reading the device log…');
+  const lines=await new Promise((res,rej)=>{
+    const to=setTimeout(()=>{capture=null;rej(new Error('No reply from the watch. Is it running v8 with the log working?'));},30000);
+    capture={lines:[],done(){clearTimeout(to);res(this.lines);}};
+    const w=port.writable.getWriter();w.write(new TextEncoder().encode('d')).then(()=>w.releaseLock(),e=>{w.releaseLock();rej(e);});
+  }).catch(e=>{toast(e.message);return null;});
+  if(!lines)return;
+  const csv=lines.filter(l=>l&&!l.startsWith('#')).join('\n')+'\n';
+  const meta=lines.filter(l=>l.startsWith('#'));
+  saveFile('tiga_log_'+dayKey(Date.now()).replace(/-/g,'')+'_'+fmtT(Date.now()).replace(':','')+'.csv',csv,'text/csv');
+  logEv('usb','Downloaded device log ('+(lines.length-1)+' rows)');toast('Saved '+(lines.length-1)+' rows. Open it in Excel, or load it here.');
+  if(await ask('Look at this walk now?','Load the log into the app so you can see it in My readings and the checks?','Load it','Not now'))loadCSV(csv,'device log');
+}
+function saveFile(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
+
+/* ---------- saved CSV log -> dataset ---------- */
+function loadCSV(text,name){
+  const lines=text.split(/\r?\n/).filter(l=>l&&!l.startsWith('#'));if(lines.length<2){toast('That file has no data rows.');return false;}
+  const hd=lines[0].split(',').map(s=>s.trim());const ix=k=>hd.indexOf(k);
+  if(ix('up_s')<0||ix('hr')<0){toast('This does not look like a TIGA log (missing up_s / hr).');return false;}
+  const raw=lines.slice(1).map(l=>l.split(',').map(Number));
+  let base=null;raw.forEach(r=>{const e=r[ix('epoch')],u=r[ix('up_s')];if(base==null&&e>1e9)base=e*1000-u*1000;});
+  if(base==null)base=Date.now()-raw[raw.length-1][ix('up_s')]*1000;
+  const rows=[];let ps=null,pt=null;
+  raw.forEach(r=>{const g=k=>{const i=ix(k);return i<0||Number.isNaN(r[i])?undefined:r[i];};
+    const e=g('epoch');const t=e>1e9?e*1000:base+g('up_s')*1000;
+    const st=g('steps');let sd=0;if(ps!=null&&st!=null)sd=st>=ps?st-ps:st;ps=st;
+    const dt=pt?Math.min(600,Math.max(0,(t-pt)/1000)):10;pt=t;
+    const row={t,dt,sd,hr:g('hr')>0?g('hr'):undefined,spo2:g('spo2')>0?g('spo2'):undefined,steps:st,alt:g('alt_m'),fl:g('floors_up'),fd:g('floors_down'),bat:g('bat'),worn:g('worn'),falls:g('falls'),p:g('p_hpa'),taps:g('taps'),g:g('accel_g'),bal:g('balance'),gps:g('gps_fix'),sats:g('sats'),dist:g('dist_m')};
+    rows.push(row);});
+  review={name:name||'saved log',rows};logEv('import','Loaded '+rows.length+' rows from '+(name||'file'));
+  if(window.onReviewChange)onReviewChange();toast('Loaded '+rows.length+' rows ('+fmtDT(rows[0].t)+' to '+fmtT(rows[rows.length-1].t)+')');return true;
+}
+function exitReview(){review=null;if(window.onReviewChange)onReviewChange();}
+
+/* ---------- demo ---------- */
+let demoT=null,demo={ph:'rest',left:60,hr:72,steps:3200,alt:0,p:1013,taps:0,bat:84,spo2:97,t:0};
+function startDemo(){bleDisconnect();H.length=0;cur=null;setMode('demo');prevSteps=null;S.falls0=0;clearInterval(demoT);
+  // pre-fill an hour of history so charts have something to show
+  const now=Date.now();let d2=Object.assign({},demo);
+  for(let i=3600;i>0;i--){demoStep(d2);const row={t:now-i*1000,dt:1,sd:d2.sd,hr:d2.hr,spo2:d2.spo2,steps:d2.steps,alt:d2.alt,fl:Math.floor(Math.abs(d2.alt)/3),p:d2.p,worn:1,falls:0,taps:d2.taps,bat:d2.bat};H.push(row);}
+  demo=d2;demoT=setInterval(()=>{demoStep(demo);ingest({hr:demo.hr,spo2:demo.spo2,steps:demo.steps,alt:demo.alt,fl:Math.floor(Math.abs(demo.alt)/3),fd:0,bat:demo.bat,worn:1,falls:S.falls0||0,p:demo.p,taps:demo.taps,g:.98,bal:88,gps:0,sats:0,dist:0},'demo');},1000);
+  logEv('demo','Demo mode started');}
+function demoStep(d){
+  d.t++;d.left--;d.sd=0;
+  if(d.left<=0){d.ph=d.ph==='rest'?'walk':'rest';d.left=d.ph==='walk'?60+Math.random()*90:90+Math.random()*150;}
+  const target=d.ph==='walk'?106:72;d.hr+=(target-d.hr)*.06+(Math.random()-.5)*2;
+  d.hr=Math.round(Math.max(55,Math.min(150,d.hr)));
+  if(d.ph==='walk'&&Math.random()<.9){d.sd=Math.random()<.5?2:1;d.steps+=d.sd;}
+  d.alt=Math.sin(d.t/400)*2.2+(d.ph==='walk'?Math.sin(d.t/37)*.6:0);d.p=1013+Math.sin(d.t/5000)*.6;
+  d.spo2=96+Math.round(Math.random()*2);if(Math.random()<.01)d.taps+=1;if(d.t%900===0)d.bat=Math.max(5,d.bat-1);
+}
+function stopDemo(){clearInterval(demoT);demoT=null;if(S.mode==='demo'){H.length=0;cur=null;prevSteps=null;S.live=null;setMode('off');}}
+function demoFall(){if(S.mode!=='demo'){toast('Start demo mode first.');return;}S.falls0=(S.falls0||0);demo.falls=1;ingest({hr:demo.hr,spo2:demo.spo2,steps:demo.steps,alt:demo.alt,fl:0,bat:demo.bat,worn:1,falls:(S.falls0+1),p:demo.p,taps:demo.taps},'demo');}
+
+/* ============================================================
+   ANALYTICS (work on rows of any spacing: 1 s live, 5 min buckets, 10 s log)
+   ============================================================ */
+const A={
+  tail(rows,sec){if(!rows.length)return[];const end=rows[rows.length-1].t-sec*1000;let i=rows.length;while(i>0&&rows[i-1].t>=end)i--;return rows.slice(i);},
+  stats(rows,k){const v=rows.map(r=>r[k]).filter(x=>has(x)&&x>0);return v.length?{n:v.length,avg:avg(v),min:Math.min(...v),max:Math.max(...v)}:null;},
+  walkCadence(rows){            // median steps/min over 10 s windows with >=5 steps
+    const w={};rows.forEach(r=>{if(r.agg)return;const k=Math.floor(r.t/10000);w[k]=(w[k]||0)+(r.sd||0);});
+    const v=Object.values(w).filter(x=>x>=5).map(x=>x*6);return v.length>=3?median(v):null;},
+  actMinutes(rows){const m={};rows.forEach(r=>{if(r.agg)return;const k=Math.floor(r.t/60000);m[k]=(m[k]||0)+(r.sd||0);});return Object.values(m).filter(x=>x>=40).length;},
+  stretches(rows){            // still periods (no steps), gaps in data break a stretch
+    const out=[];let start=null,prev=null;
+    rows.forEach(r=>{
+      if(prev&&r.t-prev.t>420000){if(start!=null&&prev.t-start>0)out.push([start,prev.t]);start=null;}
+      if(r.sd>0){if(start!=null&&r.t-start>0)out.push([start,r.t]);start=r.t;}
+      else if(start==null)start=prev?prev.t:r.t;
+      prev=r;});
+    if(start!=null&&prev&&prev.t>start)out.push([start,prev.t]);return out;},
+  floors(rows){const a=rows.map(r=>r.alt).filter(has);if(a.length<5)return null;
+    const sm=a.map((_,i)=>avg(a.slice(Math.max(0,i-2),i+3)));let anc=sm[0],up=0,dn=0;
+    sm.forEach(x=>{if(x-anc>=2.8){up++;anc=x;}else if(anc-x>=2.8){dn++;anc=x;}});return {up,dn};},
+  vSpeed(rows){const r=A.tail(rows,60).filter(x=>has(x.alt));if(r.length<4)return null;const q=Math.max(1,Math.min(5,Math.floor(r.length/3)));
+    const a=avg(r.slice(0,q).map(x=>x.alt)),b=avg(r.slice(-q).map(x=>x.alt));const dt=(r[r.length-1].t-r[0].t)/60000;return dt>0.3?(b-a)/dt:null;},
+  pTrend(rows){const r=rows.filter(x=>has(x.p)&&x.p>800);if(r.length<10)return null;const span=(r[r.length-1].t-r[0].t)/3600000;if(span<1)return {wait:true,span};
+    const k=Math.max(3,Math.floor(r.length*.1));const d=avg(r.slice(-k).map(x=>x.p))-avg(r.slice(0,k).map(x=>x.p));return {per3h:d/span*3,span};},
+  absAlt:p=>44330*(1-Math.pow(p/1013.25,0.1903)),
+  hrRecovery(rows){
+    const r=rows.filter(x=>!x.agg);if(r.length<40)return null;
+    const pre=[0];r.forEach(x=>pre.push(pre[pre.length-1]+(x.sd||0)));
+    const idxAt=t=>{let lo=0,hi=r.length-1;while(lo<hi){const m=(lo+hi)>>1;if(r[m].t<t)lo=m+1;else hi=m;}return lo;};
+    for(let i=r.length-1;i>=0;i--){
+      const x=r[i];if(!has(x.hr)||x.hr<95)continue;
+      const a=idxAt(x.t-60000),b=idxAt(x.t+30000);if(r[b].t-x.t<20000)continue;
+      if(pre[i+1]-pre[a]<30)continue;if(pre[b+1]-pre[i+1]>8)continue;
+      const j=idxAt(x.t+60000);if(Math.abs(r[j].t-(x.t+60000))>15000||!has(r[j].hr))continue;
+      // is this the local peak?
+      let pk=x.hr,pi=i;for(let k=idxAt(x.t-30000);k<=i;k++)if(has(r[k].hr)&&r[k].hr>pk){pk=r[k].hr;pi=k;}
+      if(pi!==i)continue;
+      return {peak:x.hr,after:r[j].hr,drop:x.hr-r[j].hr,t:x.t};
+    }return null;},
+  distSpeed(rows){const r=rows.filter(x=>has(x.dist));if(r.length<6)return null;
+    let d=0,t=0,s=0;for(let i=1;i<r.length;i++){const dd=r[i].dist-r[i-1].dist,dt=(r[i].t-r[i-1].t)/1000;if(dt<=0||dt>60)continue;if(dd>=0&&dd<40&&(r[i].sd>0||r[i-1].sd>0)){d+=dd;t+=dt;s+=r[i].sd||0;}}
+    return t>20&&d>5?{mps:d/t,stride:s>0?d/s:null,d,t}:null;}
+};
+const rowsNow=()=>review?review.rows:H;
+const rowsDay=()=>review?review.rows:todayRows();
+function ctx(){
+  const rows=rowsNow(),day=rowsDay();const last=rows[rows.length-1]||null;
+  const age=ageOf(profile.dob)||67;
+  return {rows,day,last,age,cad:last?(A.walkCadence(A.tail(rows,300))||0):0,
+    daySteps:review?day.reduce((s,r)=>s+(r.sd||0),0):todaySteps(),
+    act:review?A.actMinutes(day):daySummary(dayKey(Date.now())).act+(0)};
+}
+
+/* ============================================================
+   THE 36 TESTS — one definition, two views
+   kind: live | derived | guided | fw
+   ============================================================ */
+const ST={ok:'Looks good',watch:'Worth watching',alert:'Talk to someone',na:'Not measured yet',wait:'Collecting data'};
+const mk=(v,s,t,d)=>({v,s,t,d:d||''});
+const noLog=d=>mk('—','na','Not sent over Bluetooth yet. Load the device log (System) to see this.',d||'field only in USB/CSV data');
+const noFw=d=>mk('—','na','Needs a watch update (firmware v8.1). Not measured yet.',d||'');
+const GR=()=>store.get('gr',{});
+const CATS=[['Vitals','Heart and oxygen'],['Movement','Walking and activity'],['Balance & safety','Falls and steadiness'],['Hands & reactions','Quick, steady hands'],['Altitude & weather','Stairs, height and air'],['Sleep & device','Rest and the watch itself']];
+const TESTS=[
+ {id:1,cat:0,name:'Heart rate (HR)',sensor:'MAX30102 (PPG)',kind:'live',how:'Peak detection on IR signal, rolling average of last beats; shown only when worn.',
+  plain:'How fast your heart is beating right now. It is normal for it to rise when you walk and fall when you rest.',
+  calc:c=>{const h=c.last&&c.last.hr;if(!has(h))return mk('—','na','Keep the watch snug and still for a few seconds.','hr missing');
+    const mx=220-c.age,walking=c.cad>40;let s='ok',t='Your heart rate is in a comfortable range.';
+    if(h<40){s='alert';t='Your heart rate is very low. If you feel dizzy or faint, get help.';}
+    else if(h<50){s='watch';t='A little low. Fine for some fit people, but mention it if you feel dizzy.';}
+    else if(h>150||(h>0.9*mx)){s='alert';t='Your heart rate is very high. Sit down and rest. If it stays high or you feel unwell, get help.';}
+    else if(h>100&&!walking){s='watch';t='A little fast for resting. Try sitting quietly for a few minutes.';}
+    else if(walking)t='Your heart is working while you move, which is normal.';
+    return mk(h+' bpm',s,t,'age '+c.age+', est. max '+mx+', cadence '+Math.round(c.cad));}},
+ {id:2,cat:0,name:'Blood oxygen (SpO2)',sensor:'MAX30102 (red/IR ratio)',kind:'live',how:'SpO2 = 110 − 25·R, R = (redAC/redDC)/(irAC/irDC) over a 400-sample window.',
+  plain:'How much oxygen your blood is carrying. 95 and above is typical. Cold fingers or a loose fit can make it read low.',
+  calc:c=>{const s2=c.last&&c.last.spo2;if(!has(s2))return mk('—','na','Needs about 10 seconds of still, snug wear.','no valid SpO2');
+    if(s2>=95)return mk(s2+' %','ok','Your oxygen level looks healthy.','');
+    if(s2>=92)return mk(s2+' %','watch','A little low. Warm your hands, sit still and check again.','');
+    return mk(s2+' %','alert','Low reading. If it stays under 92 or you feel breathless, call your doctor.','');}},
+ {id:3,cat:1,name:'Steps today',sensor:'MPU6050',kind:'live',how:'Accelerometer step counter; day total = sum of step increments (handles reboots).',
+  plain:'The number of steps you have taken today. Every little walk counts.',
+  calc:c=>c.daySteps>0?mk(nfmt(c.daySteps),'ok','You have taken '+nfmt(c.daySteps)+' steps so far.',''):mk('0','na','No steps yet today.','')},
+ {id:4,cat:2,name:'Fall detection',sensor:'MPU6050',kind:'live',how:'Firmware: free-fall then impact threshold. Count since boot. Logged as [FALL?] for tuning.',
+  plain:'The watch looks for a sudden fall. If it thinks you fell, it tells your family.',
+  calc:c=>{const f=c.last&&c.last.falls;if(!has(f))return mk('—','na','Waiting for the watch.','');return f===0?mk('0','ok','No falls noticed.','falls=0'):mk(String(f),'watch','The watch noticed '+f+' possible fall(s). If you did not fall, it was a false alarm.','falls='+f+' (review [FALL?] log lines)');}},
+ {id:5,cat:2,name:'Balance score',sensor:'MPU6050',kind:'derived',how:'Sway from accelerometer variance while stable. 100 = very steady. Only in USB/CSV data.',
+  plain:'How steady you are when standing or walking. Higher is steadier.',
+  calc:c=>{const b=A.stats(A.tail(c.rows,300).filter(r=>has(r.bal)),'bal');if(!has(c.last&&c.last.bal))return noLog('bal');
+    if(!b)return mk('—','na','Not enough data yet.','');const v=Math.round(b.avg);return v>=80?mk(v+' / 100','ok','You look steady on your feet.','avg 5 min'):v>=60?mk(v+' / 100','watch','A little unsteady at times. Take care on stairs.','avg 5 min'):mk(v+' / 100','alert','Quite unsteady. Please mention it to your doctor.','avg 5 min');}},
+ {id:6,cat:2,name:'Posture / tilt angle',sensor:'MPU6050',kind:'fw',how:'Tilt from gravity vector. Computed on the watch (shown on its report) but not yet in the data stream.',
+  plain:'Whether you are upright, leaning or lying down.',calc:()=>noFw('add tilt to BLE packet + CSV')},
+ {id:7,cat:1,name:'Active minutes',sensor:'MPU6050',kind:'derived',how:'A minute counts as active when it has ≥ 40 steps.',
+  plain:'Minutes today you spent walking briskly or climbing.',
+  calc:c=>mk(c.act+' min',c.act>0?'ok':'na',c.act>0?'You were active for '+c.act+' minutes.':'No brisk activity yet today.','≥40 steps/min')},
+ {id:8,cat:5,name:'Is the watch worn?',sensor:'MAX30102 (IR level)',kind:'live',how:'Worn when IR > 20000 for 3 s (firmware).',
+  plain:'Checks the watch is on your skin, so the readings can be trusted.',
+  calc:c=>{if(!c.last)return mk('—','na','Waiting for the watch.','');const w=c.day.filter(r=>has(r.worn));const p=w.length?Math.round(100*w.filter(r=>r.worn).length/w.length):null;
+    return c.last.worn?mk('Worn','ok','The watch is on and reading.','worn today '+p+'%'):mk('Not worn','watch','The watch does not feel your skin. Put it on snugly to get readings.','IR below threshold');}},
+ {id:9,cat:4,name:'Altitude (relative)',sensor:'BMP280',kind:'live',how:'Barometric formula relative to the starting baseline.',
+  plain:'How much higher or lower you are than where you started.',
+  calc:c=>has(c.last&&c.last.alt)?mk((c.last.alt>=0?'+':'')+c.last.alt.toFixed(1)+' m','ok','You are '+Math.abs(c.last.alt).toFixed(1)+' m '+(c.last.alt>=0?'above':'below')+' where you started.',''):mk('—','na','Waiting for the watch.','')},
+ {id:10,cat:4,name:'Floors climbed',sensor:'BMP280',kind:'live',how:'Each ~2.8 m rise = 1 floor (hysteresis).',
+  plain:'How many flights of stairs you have climbed.',
+  calc:c=>has(c.last&&c.last.fl)?mk(c.last.fl+' up','ok',c.last.fl?'You climbed '+c.last.fl+' floor(s).':'No stairs yet.','floors_up='+c.last.fl):mk('—','na','Waiting for the watch.','')},
+ {id:11,cat:4,name:'Air pressure',sensor:'BMP280',kind:'live',how:'Raw pressure in hPa.',
+  plain:'The weight of the air. It changes slowly with the weather and when you go up or down.',
+  calc:c=>has(c.last&&c.last.p)?mk(c.last.p.toFixed(1)+' hPa','ok','Normal air pressure is around 1013.',''):mk('—','na','Waiting for the watch.','')},
+ {id:12,cat:1,name:'GPS distance & speed',sensor:'NEO-6M',kind:'derived',how:'Distance and speed from the GPS fix; distance only in USB/CSV data, BLE carries fix + satellites.',
+  plain:'How far you walked outdoors. The watch needs a view of the sky.',
+  calc:c=>{const l=c.last;if(!l)return mk('—','na','Waiting for the watch.','');const ds=A.distSpeed(c.rows);
+    if(has(l.dist)&&l.dist>0)return mk(Math.round(l.dist)+' m','ok','Distance this session: '+(l.dist/1000).toFixed(2)+' km.',ds?'avg '+ds.mps.toFixed(2)+' m/s':'');
+    if(l.gps)return mk('Fix · '+l.sats+' sats','ok','GPS can see the sky. Distance appears once you walk.','sats '+l.sats);
+    return mk('No fix','na','No GPS signal yet. Take it outdoors for a few minutes.','gps=0');}},
+ {id:13,cat:5,name:'Battery',sensor:'Internal ADC',kind:'live',how:'Cell voltage mapped to percent.',
+  plain:'How much charge the watch has left.',
+  calc:c=>{const b=c.last&&c.last.bat;if(!has(b))return mk('—','na','Waiting for the watch.','');return b>=30?mk(b+' %','ok','Plenty of charge.',''):b>=15?mk(b+' %','watch','Getting low. Charge it tonight.',''):mk(b+' %','alert','Very low. Please charge it now.','');}},
+ {id:14,cat:5,name:'Chip temperature',sensor:'MPU6050 die',kind:'fw',how:'Die temperature is read by the watch but not yet sent.',plain:'How warm the watch electronics are. Mainly a health check for the device.',calc:()=>noFw('add temp to packet')},
+ {id:15,cat:3,name:'Tap detection',sensor:'Piezo (LM393)',kind:'live',how:'Piezo spike above baseline+delta counts a tap. Count since boot, sent 1×/s.',
+  plain:'The watch can feel when you tap it. This is for quick, hands-free checks.',
+  calc:c=>has(c.last&&c.last.taps)?mk(c.last.taps+' taps','ok','Tap the watch and watch this number go up.','count since boot'):mk('—','na','Waiting for the watch.','')},
+ {id:16,cat:1,name:'Walking pace (cadence)',sensor:'MPU6050',kind:'derived',how:'Median steps/min over 10 s windows with ≥ 5 steps, last 5 min.',
+  plain:'How many steps you take each minute while walking.',
+  calc:c=>{const v=A.walkCadence(A.tail(c.rows,review?1e9:300));if(v==null)return mk('—','na','Walk for a minute and this will appear.','');const r=Math.round(v);
+    return r>=100?mk(r+' steps/min','ok','A brisk, healthy pace.','median 10 s windows'):r>=70?mk(r+' steps/min','ok','A comfortable walking pace.',''):mk(r+' steps/min','watch','A slow pace. Take your time, and mention it if walking feels harder.','');}},
+ {id:17,cat:2,name:'Gait symmetry',sensor:'MPU6050',kind:'fw',how:'Left/right step timing needs per-step timestamps or raw accel.',plain:'Whether your left and right steps are even.',calc:()=>noFw('per-step timing')},
+ {id:18,cat:2,name:'Tremor',sensor:'MPU6050',kind:'fw',how:'Needs 50 Hz accel and a 4–12 Hz band-power estimate.',plain:'Checks for hand shake. Not a diagnosis, just something to track.',calc:()=>noFw('50 Hz accel FFT')},
+ {id:19,cat:2,name:'Sit-to-stand time',sensor:'MPU6050',kind:'fw',how:'Needs accel waveform of the rise.',plain:'How quickly you can get up from a chair.',calc:()=>noFw('accel waveform')},
+ {id:20,cat:3,name:'Reaction time',sensor:'Phone screen (for now)',kind:'guided',how:'5 rounds; median ms from "go" to tap. Uses the phone screen until the watch buttons are streamed.',
+  plain:'How fast you react when the screen turns green. Quick reactions help keep you steady.',
+  calc:()=>{const g=GR()[20];if(!g)return mk('—','na','Tap Start to try it. It takes about 30 seconds.','');const m=g.v;return m<=400?mk(m+' ms','ok','Quick reactions.','n=5, '+fmtDT(g.t)):m<=600?mk(m+' ms','ok','Good reactions for your age.','n=5, '+fmtDT(g.t)):mk(m+' ms','watch','A little slow today. Tired, or distracted? Try again later.','n=5, '+fmtDT(g.t));}},
+ {id:21,cat:3,name:'Tap rhythm',sensor:'Piezo',kind:'guided',how:'Counts piezo taps in 15 s. Timing regularity needs per-tap timestamps (v8.1).',
+  plain:'Tap the watch at a steady beat for 15 seconds. It counts your taps.',needsLive:true,
+  calc:()=>{const g=GR()[21];if(!g)return mk('—','na','Tap Start, then tap the watch steadily.','');return mk(g.v+' taps','ok','You tapped '+g.v+' times in 15 seconds.','regularity: v8.1, '+fmtDT(g.t));}},
+ {id:22,cat:3,name:'Double-tap speed',sensor:'Piezo',kind:'fw',how:'Needs per-tap timestamps from the watch.',plain:'How fast you can tap twice.',calc:()=>noFw('per-tap timestamps')},
+ {id:23,cat:3,name:'Hold steady',sensor:'Phone screen (for now)',kind:'guided',how:'3 tries to hold a button for exactly 5 s; reports mean absolute error.',
+  plain:'Press and hold a button for exactly 5 seconds. Shows how well you can control your hand.',
+  calc:()=>{const g=GR()[23];if(!g)return mk('—','na','Tap Start to try it. It takes about a minute.','');return g.v<=0.5?mk('±'+g.v.toFixed(1)+' s','ok','Very steady timing.','mean abs error, '+fmtDT(g.t)):g.v<=1.2?mk('±'+g.v.toFixed(1)+' s','ok','Good control.','mean abs error, '+fmtDT(g.t)):mk('±'+g.v.toFixed(1)+' s','watch','A bit off today. Try again when rested.','mean abs error');}},
+ {id:24,cat:5,name:'Sleep (estimate)',sensor:'MPU6050',kind:'derived',how:'Longest no-step stretch ≥ 3 h in the last day. Approximate: stillness, not true sleep stages.',
+  plain:'A rough guess at when you were asleep, based on lying still for hours.',
+  calc:c=>{const st=A.stretches(c.day).filter(s=>s[1]-s[0]>=3*3600000).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0];
+    if(!st)return mk('—','wait','Needs a night of wearing the watch.','no ≥3 h still stretch');const h=(st[1]-st[0])/3600000;
+    return mk(h.toFixed(1)+' h',h>=6?'ok':'watch',(h>=6?'You rested ':'You rested only ')+h.toFixed(1)+' hours ('+fmtT(st[0])+' to '+fmtT(st[1])+').','still stretch');}},
+ {id:25,cat:5,name:'Waking up',sensor:'MPU6050',kind:'derived',how:'First steps after the longest still stretch.',
+  plain:'When you got up after resting.',
+  calc:c=>{const st=A.stretches(c.day).filter(s=>s[1]-s[0]>=3*3600000).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0];if(!st)return mk('—','wait','Appears after a long rest.','');return mk(fmtT(st[1]),'ok','You were up and moving around '+fmtT(st[1])+'.','');}},
+ {id:26,cat:1,name:'Sitting time',sensor:'MPU6050',kind:'derived',how:'Total of no-step stretches ≥ 10 min (excluding sleep stretch ≥ 3 h).',
+  plain:'How long you sat or stayed still today. A short walk every hour is good for you.',
+  calc:c=>{const all=A.stretches(c.day);const sit=all.filter(s=>{const d=s[1]-s[0];return d>=600000&&d<3*3600000;});if(!sit.length)return mk('—','wait','Not enough data yet.','');
+    const tot=sit.reduce((a,s)=>a+s[1]-s[0],0)/60000,lg=Math.max(...sit.map(s=>s[1]-s[0]))/60000;
+    return lg>90?mk(fmtDur(tot*60),'watch','Your longest sit was '+fmtDur(lg*60)+'. Try standing up every hour.','longest '+Math.round(lg)+' min'):mk(fmtDur(tot*60),'ok','You broke up your sitting well.','longest '+Math.round(lg)+' min');}},
+ {id:27,cat:1,name:'Walking speed',sensor:'GPS + MPU6050',kind:'derived',how:'Δdistance/Δtime over walking windows. Needs dist (USB/CSV). Gait speed < 0.8 m/s is a known frailty marker.',
+  plain:'How fast you walk outdoors. A steady pace is a good sign of general health.',
+  calc:c=>{const d=A.distSpeed(c.rows);if(!d)return has(c.last&&c.last.dist)?mk('—','wait','Walk outdoors for a minute with GPS.','needs ≥20 s walking with fix'):noLog('dist');
+    const v=d.mps;return v>=1.0?mk(v.toFixed(2)+' m/s','ok','A good walking speed.',''):v>=0.8?mk(v.toFixed(2)+' m/s','watch','A slower pace today.',''):mk(v.toFixed(2)+' m/s','watch','A slow pace. Worth mentioning to your doctor if it is usual for you.','');}},
+ {id:28,cat:1,name:'Stride length',sensor:'GPS + steps',kind:'derived',how:'Distance ÷ steps over walking windows.',
+  plain:'How long each step is. Shorter steps can mean you are being careful or tired.',
+  calc:c=>{const d=A.distSpeed(c.rows);if(!d||!d.stride)return has(c.last&&c.last.dist)?mk('—','wait','Needs a walk with GPS.',''):noLog('dist');return mk(d.stride.toFixed(2)+' m','ok','About '+Math.round(d.stride*100)+' cm per step.','');}},
+ {id:29,cat:4,name:'Climbing speed',sensor:'BMP280',kind:'derived',how:'Slope of altitude over the last 60 s.',
+  plain:'How fast you go up or down stairs or slopes.',
+  calc:c=>{const v=A.vSpeed(c.rows);if(v==null)return mk('—','wait','Needs a minute of data.','');return Math.abs(v)<0.5?mk('Level','ok','You are on level ground.',v.toFixed(1)+' m/min'):mk((v>0?'↑ ':'↓ ')+Math.abs(v).toFixed(1)+' m/min','ok',v>0?'You are climbing.':'You are going down.','');}},
+ {id:30,cat:4,name:'Floors descended',sensor:'BMP280',kind:'derived',how:'Floors down from firmware (fd) or from altitude drops ≥ 2.8 m.',
+  plain:'How many flights of stairs you have gone down. Going down is harder on knees.',
+  calc:c=>{const fd=c.last&&c.last.fd;if(has(fd))return mk(fd+' down','ok',fd?'You went down '+fd+' floor(s).':'No descents yet.','from firmware');const f=A.floors(c.rows);return f?mk(f.dn+' down','ok',f.dn?'About '+f.dn+' floor(s) down.':'No descents yet.','derived from alt (BLE has no fd)'):mk('—','wait','Needs more data.','');}},
+ {id:31,cat:4,name:'Weather change',sensor:'BMP280',kind:'derived',how:'Pressure change per 3 h; needs ≥ 1 h of data.',
+  plain:'Falling air pressure often means rain or a change in weather; some people feel it in their joints.',
+  calc:c=>{const t=A.pTrend(c.day);if(!t)return mk('—','wait','Needs an hour of data.','');if(t.wait)return mk('—','wait','Collecting data ('+Math.round(t.span*60)+' min so far).','');const d=t.per3h;
+    return d<=-1.6?mk(d.toFixed(1)+' hPa/3h','watch','Pressure is falling: the weather may turn.',''):d>=1.6?mk('+'+d.toFixed(1)+' hPa/3h','ok','Pressure is rising: likely clearing up.',''):mk(d.toFixed(1)+' hPa/3h','ok','The weather looks steady.','');}},
+ {id:32,cat:4,name:'High-altitude check',sensor:'BMP280',kind:'derived',how:'Absolute altitude from pressure (44330·(1−(p/1013.25)^0.1903)); weather noise ±100 m.',
+  plain:'Checks if you are somewhere high where the air is thin.',
+  calc:c=>{const p=c.last&&c.last.p;if(!has(p))return mk('—','na','Waiting for the watch.','');const a=A.absAlt(p);const r=Math.round(a/10)*10;
+    return a>3000?mk(r+' m','alert','Very high. Take it slowly and tell someone if you feel unwell.','approx'):a>2000?mk(r+' m','watch','High altitude. Drink water and rest if you feel breathless.','approx'):mk(r+' m','ok','Normal height. No altitude concern.','approx, ±100 m');}},
+ {id:33,cat:0,name:'Heart-rate recovery',sensor:'MAX30102',kind:'derived',how:'Peak HR ≥ 95 after ≥ 30 steps/min, then HR 60 s later with no steps. Drop ≥ 12 bpm = normal (HRR1).',
+  plain:'How quickly your heart calms down after you stop walking. A quick drop is a sign of a healthy heart.',
+  calc:c=>{const r=A.hrRecovery(c.rows);if(!r)return mk('—','wait','Walk a little, then stop and keep the watch on for a minute.','no qualifying peak');
+    return r.drop>=12?mk('−'+r.drop+' bpm','ok','Your heart calmed down quickly after walking.','peak '+r.peak+' → '+r.after+' in 60 s'):mk('−'+r.drop+' bpm','watch','Your heart settled slowly after walking. Worth mentioning to your doctor if this is usual.','peak '+r.peak+' → '+r.after);}},
+ {id:34,cat:0,name:'Heart-rate variability (HRV)',sensor:'MAX30102',kind:'fw',how:'Needs inter-beat intervals (ms) from the beat detector.',plain:'The tiny differences in time between heartbeats. A sign of how relaxed or stressed your body is.',calc:()=>noFw('IBI stream')},
+ {id:35,cat:0,name:'Blood-flow strength (perfusion index)',sensor:'MAX30102',kind:'fw',how:'PI = AC/DC of IR signal ×100; not yet exported.',plain:'How strongly blood is flowing under the sensor. Low in cold hands.',calc:()=>noFw('AC/DC of IR')},
+ {id:36,cat:2,name:'Fall-risk score',sensor:'MPU6050 + piezo (composite)',kind:'derived',how:'EXPERIMENTAL partial score: +30 balance<70 (+15 if <85), +20 cadence<80, +15/fall (max 30). Tremor/gait missing. For trends only, not a risk assessment.',
+  plain:'A simple combined check of steadiness, walking pace and any falls. It shows trends, not a diagnosis.',
+  calc:c=>{const b=A.stats(A.tail(c.rows,review?1e9:1800).filter(r=>has(r.bal)),'bal');const cad=A.walkCadence(A.tail(c.rows,review?1e9:1800));const f=c.last&&c.last.falls||0;
+    if(!b&&cad==null&&!f)return mk('—','wait','Needs balance and walking data.','inputs: bal,cadence,falls');
+    let pts=0;if(b)pts+=b.avg<70?30:b.avg<85?15:0;if(cad!=null&&cad<80)pts+=20;pts+=Math.min(30,f*15);
+    const lvl=pts>=50?'alert':pts>=25?'watch':'ok';const parts=[b?'bal '+Math.round(b.avg):'bal n/a',cad!=null?'cad '+Math.round(cad):'cad n/a','falls '+f];
+    return mk(pts+' / 100',lvl,lvl==='ok'?'No signs of extra fall risk in what we can measure.':lvl==='watch'?'A few signs worth watching: take care on stairs and uneven ground.':'Several signs together. Please talk to your doctor about fall prevention.',parts.join(', ')+' (partial)');}}
+];
+const KIND_LABEL={live:'Live',derived:'Derived',guided:'Phone test',fw:'Needs v8.1'};
+
+/* ---------- renderers ---------- */
+function infoBtn(id,label){return '<button class="info-btn" data-info="'+id+'" aria-expanded="false" aria-controls="'+id+'" aria-label="'+esc(label)+'">i</button>';}
+function agnesCard(t){
+  const act=t.kind==='guided'?'<div style="margin-top:.5rem"><button class="btn sm" data-start="'+t.id+'">Start</button></div>':'';
+  return '<div class="tcard" data-id="'+t.id+'"><div class="t1"><div style="min-width:0"><div class="nm">'+esc(t.name)+'</div><div class="res" data-t="'+t.id+'"></div></div>'+infoBtn('ti'+t.id,'What is '+t.name+'?')+'</div><p class="explain" id="ti'+t.id+'" hidden>'+esc(t.plain)+'</p>'+act+'</div>';
+}
+function renderAgnesTests(){
+  const el=$('#agnesTests');if(!el)return;
+  el.innerHTML=CATS.map((c,i)=>{const ts=TESTS.filter(t=>t.cat===i);return '<details class="acc"'+(i===0?' open':'')+'><summary><span>'+esc(c[0])+' <span class="muted small">· '+esc(c[1])+'</span></span></summary><div class="in">'+ts.map(agnesCard).join('')+'</div></details>';}).join('');
+  refreshTests();
+}
+function christineCard(t){
+  const tr=store.get('tr',{})[t.id]||{};
+  return '<div class="tcard" data-id="'+t.id+'"><div class="t1"><div style="min-width:0"><div class="nm">#'+t.id+' '+esc(t.name)+'</div><div class="small muted">'+esc(t.sensor)+'</div></div><span class="chip src">'+KIND_LABEL[t.kind]+'</span></div>'+
+   '<div class="res" data-c="'+t.id+'"></div>'+
+   '<dl class="kv"><dt>Method</dt><dd>'+esc(t.how)+'</dd><dt>Detail</dt><dd data-cd="'+t.id+'"></dd></dl>'+
+   '<div class="row" style="margin-top:.5rem"><div class="seg" role="group" aria-label="Result for test '+t.id+'"><button data-pf="'+t.id+':pass" aria-pressed="'+(tr.res==='pass')+'">Pass</button><button data-pf="'+t.id+':fail" aria-pressed="'+(tr.res==='fail')+'">Fail</button></div>'+(t.kind==='guided'?'<button class="btn sm ghost" data-start="'+t.id+'">Run</button>':'')+'</div>'+
+   '<label class="sr" for="tn'+t.id+'">Note for test '+t.id+'</label><input type="text" id="tn'+t.id+'" data-tn="'+t.id+'" placeholder="Note (what you saw, accuracy, fix needed)" value="'+esc(tr.note||'')+'" style="margin-top:.5rem"></div>';
+}
+function renderChristineTests(host){
+  host.innerHTML='<p class="small muted">Same 36 checks as My session, with the method, raw detail and a place to record pass/fail and notes. Notes go into the exported report.</p><div id="tsum" class="row" style="margin:.4rem 0"></div>'+
+   CATS.map((c,i)=>{const ts=TESTS.filter(t=>t.cat===i);return '<details class="acc" style="margin-top:.6rem"><summary><span>'+esc(c[0])+' · '+ts.length+'</span></summary><div class="in">'+ts.map(christineCard).join('')+'</div></details>';}).join('');
+  refreshTests();
+}
+let TCTX=null;
+function refreshTests(){
+  TCTX=ctx();const out={};
+  TESTS.forEach(t=>{let r;try{r=t.calc(TCTX);}catch(e){r=mk('—','na','Error: '+e.message,'');}out[t.id]=r;
+    $$('[data-t="'+t.id+'"]').forEach(el=>{el.innerHTML='<span class="chip '+(r.s==='wait'?'':r.s)+'">'+ST[r.s]+'</span> <strong>'+esc(r.v)+'</strong><div class="small muted">'+esc(r.t)+'</div>';});
+    $$('[data-c="'+t.id+'"]').forEach(el=>{el.innerHTML='<span class="chip '+(r.s==='wait'?'':r.s)+'">'+ST[r.s]+'</span> <strong>'+esc(r.v)+'</strong> <span class="small muted">'+esc(r.t)+'</span>';});
+    $$('[data-cd="'+t.id+'"]').forEach(el=>el.textContent=r.d||'—');});
+  TESTS.out=out;
+  const s=$('#tsum');if(s){const n=k=>TESTS.filter(t=>out[t.id].s===k).length;const tr=store.get('tr',{});
+    s.innerHTML='<span class="chip ok">'+n('ok')+' ok</span><span class="chip watch">'+n('watch')+' watch</span><span class="chip alert">'+n('alert')+' alert</span><span class="chip">'+(n('na')+n('wait'))+' no data</span><span class="chip src">'+TESTS.filter(t=>t.kind==='fw').length+' need v8.1</span><span class="chip">'+Object.values(tr).filter(x=>x.res==='pass').length+' pass / '+Object.values(tr).filter(x=>x.res==='fail').length+' fail</span>';}
+}
+
+/* ---------- guided tests (modal, no prompt()) ---------- */
+async function runGuided(id){
+  if(id===20)return reactionTest();
+  if(id===23)return holdTest();
+  if(id===21)return tapTest();
+}
+function saveGR(id,v){const g=GR();g[id]={v,t:Date.now()};store.set('gr',g);logEv('test','Test #'+id+' result '+v);refreshTests();}
+async function reactionTest(){
+  const times=[];const z=document.createElement('div');z.className='bigzone';z.setAttribute('role','button');z.tabIndex=0;z.textContent='Tap here to begin';
+  let state='idle',t0=0,timer=null,round=0;
+  const next=()=>{round++;if(round>5){fin();return;}state='wait';z.className='bigzone wait';z.textContent='Wait for green… ('+round+'/5)';timer=setTimeout(()=>{state='go';z.className='bigzone go';z.textContent='TAP NOW!';t0=performance.now();},1200+Math.random()*2400);};
+  let finish;
+  const fin=()=>{const m=Math.round(median(times));saveGR(20,m);z.className='bigzone';z.textContent='Your reaction time: '+m+' ms';setTimeout(()=>finish&&finish('done'),1500);};
+  const tap=()=>{if(state==='idle'){next();}else if(state==='wait'){clearTimeout(timer);z.textContent='Too early! Wait for green… ';state='idle';round--;z.className='bigzone';setTimeout(()=>{z.textContent='Tap to try this round again';},600);}
+    else if(state==='go'){times.push(performance.now()-t0);state='between';z.className='bigzone';z.textContent=Math.round(times[times.length-1])+' ms';setTimeout(next,900);}};
+  z.addEventListener('pointerdown',e=>{e.preventDefault();tap();});z.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();tap();}});
+  const p=modal({title:'Reaction time',html:'<p>When the box turns <strong>green</strong>, tap it as fast as you can. Five rounds.</p>',node:z,actions:[{label:'Close',kind:'ghost',value:'x'}],onOpen:(b,f)=>{finish=f;}});
+  await p;clearTimeout(timer);
+}
+async function holdTest(){
+  const errs=[];let round=0;const z=document.createElement('div');z.className='bigzone';z.setAttribute('role','button');z.tabIndex=0;
+  let down=0,finish;const msg=()=>{z.textContent=round>=3?'Done':'Press and HOLD for exactly 5 seconds. Let go when you think 5 seconds is up. ('+(round+1)+'/3)';};msg();
+  const dn=e=>{e.preventDefault();if(round>=3||down)return;down=performance.now();z.className='bigzone go';z.textContent='Holding…';};
+  const up=e=>{if(!down)return;const s=(performance.now()-down)/1000;down=0;errs.push(Math.abs(s-5));round++;z.className='bigzone';z.textContent='You held '+s.toFixed(1)+' s';
+    setTimeout(()=>{if(round>=3){const m=avg(errs);saveGR(23,Math.round(m*10)/10);z.textContent='Average error: ±'+m.toFixed(1)+' s';setTimeout(()=>finish&&finish('done'),1500);}else msg();},1200);};
+  z.addEventListener('pointerdown',dn);z.addEventListener('pointerup',up);z.addEventListener('pointercancel',up);
+  z.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat)dn(e);});z.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter')up(e);});
+  await modal({title:'Hold steady',html:'<p>Do not count out loud, just go by feel.</p>',node:z,actions:[{label:'Close',kind:'ghost',value:'x'}],onOpen:(b,f)=>{finish=f;}});
+}
+async function tapTest(){
+  if(!(S.live&&has(S.live.taps))){await modal({title:'Connect first',html:'<p>This check counts taps on the watch, so the watch needs to be connected (or demo mode on). Connect it in <strong>System</strong>.</p>'});return;}
+  const z=document.createElement('div');z.className='bigzone';let base=S.live.taps,left=15,tm,finish;
+  const upd=()=>{z.innerHTML='Tap the watch steadily<br><span style="font-size:2.4rem">'+Math.max(0,(S.live.taps||0)-base)+'</span><br><span class="small">'+left+' s left</span>';};
+  upd();const iv=setInterval(()=>{left--;upd();if(left<=0){clearInterval(iv);const n=(S.live.taps||0)-base;saveGR(21,n);z.textContent='You tapped '+n+' times';setTimeout(()=>finish&&finish('done'),1500);}},1000);
+  const poll=setInterval(upd,500);
+  await modal({title:'Tap rhythm',node:z,html:'<p>Tap the sensor on the watch at a steady beat. Counts update about once a second.</p>',actions:[{label:'Close',kind:'ghost',value:'x'}],onOpen:(b,f)=>{finish=f;}});
+  clearInterval(iv);clearInterval(poll);
+}
+
+/* ============================================================
+   TELEGRAM (family updates + caretaker requests)
+   ============================================================ */
+const tgReady=()=>!!(settings.tgToken&&settings.tgChat);
+async function tgSend(text){
+  if(!tgReady())return false;
+  try{const r=await fetch('https://api.telegram.org/bot'+encodeURIComponent(settings.tgToken)+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:settings.tgChat,text})});
+    const j=await r.json();if(!j.ok){logEv('telegram','Send failed: '+(j.description||r.status));return false;}logEv('telegram','Sent: '+text.split('\n')[0].slice(0,70));return true;}
+  catch(e){logEv('telegram','Send error: '+(e.message||e));return false;}
+}
+let tgBusy=false;
+async function tgPoll(){
+  if(!tgReady()||!settings.tgPoll||document.hidden||tgBusy)return;tgBusy=true;
+  try{
+    const r=await fetch('https://api.telegram.org/bot'+encodeURIComponent(settings.tgToken)+'/getUpdates?timeout=0&offset='+(settings.tgOffset||0)+'&allowed_updates='+encodeURIComponent('["message"]'));const j=await r.json();
+    if(!j.ok){logEv('telegram','Poll failed: '+(j.description||''));return;}
+    for(const u of j.result){settings.tgOffset=u.update_id+1;const m=u.message;if(!m||!m.text)continue;
+      if(String(m.chat.id)!==String(settings.tgChat)){logEv('telegram','Ignored message from another chat');continue;}
+      const cmd=m.text.trim().toLowerCase().split(/\s+/)[0].split('@')[0];
+      const who=(m.from&&m.from.first_name)||'Family';
+      if(cmd==='/update'||cmd==='/status'||cmd==='update'){logEv('telegram','Update requested by '+who);setLastReq(who);await tgSend(statusText());}
+      else if(cmd==='/hr'){await tgSend(S.live&&has(S.live.hr)?'HR '+S.live.hr+' bpm':'No heart rate reading right now.');}
+      else if(cmd==='/help'||cmd==='/start'){await tgSend('TIGA commands:\n/update – full status\n/hr – heart rate now\n(The app must be open on '+(firstName()||'the wearer')+'’s phone.)');}
+    }
+    saveSettings();
+  }catch(e){/* offline: ignore */}finally{tgBusy=false;}
+}
+function setLastReq(who){store.set('lastReq',{who,t:Date.now()});renderLastReq();}
+function renderLastReq(){const l=store.get('lastReq',null),el=$('#lastReq');if(el)el.textContent=l?'Last request: '+l.who+' at '+fmtT(l.t):'';}
+function statusText(){
+  const l=S.live,d=daySummary(dayKey(Date.now()));const nm=firstName()||'TIGA wearer';const out=[];
+  out.push('TIGA update – '+nm+' ('+fmtT(Date.now())+')');
+  if(!l||Date.now()-S.lastT>60000)out.push('No live data from the watch right now'+(l?' (last '+Math.round((Date.now()-S.lastT)/60000)+' min ago).':'.'));
+  if(l){out.push('HR '+(has(l.hr)?l.hr+' bpm':'no reading')+' · SpO2 '+(has(l.spo2)?l.spo2+'%':'no reading')+' · '+(l.worn?'watch worn':'watch not worn'));
+    out.push('Steps today '+nfmt(d.steps)+' · Active '+d.act+' min · Floors '+(l.fl||0));
+    if(has(l.bat))out.push('Battery '+l.bat+'%');}
+  const n=store.get('notes',[]).find(x=>dayKey(x.t)===dayKey(Date.now()));if(n)out.push('Last note ('+fmtT(n.t)+'): '+({good:'😀',ok:'😐',low:'😟'}[n.mood]||'')+' '+(n.text||''));
+  if(S.mode==='demo')out.push('(DEMO DATA)');
+  return out.join('\n');
+}
+
+/* ============================================================
+   SOS (hold 2 s, 10 s cancel window)
+   ============================================================ */
+function initSOS(){
+  const b=$('#sos'),ring=$('#sosRing');let t0=0,raf=0,fired=false;
+  const frame=()=>{const p=Math.min(1,(performance.now()-t0)/2000);ring.style.strokeDashoffset=String(100*(1-p));if(p>=1){stop(true);return;}raf=requestAnimationFrame(frame);};
+  const start=()=>{if(t0)return;fired=false;t0=performance.now();b.classList.add('holding');raf=requestAnimationFrame(frame);};
+  const stop=ok=>{cancelAnimationFrame(raf);const held=performance.now()-t0;const was=t0;t0=0;b.classList.remove('holding');ring.style.strokeDashoffset='100';
+    if(ok){fired=true;sosFlow();}else if(was&&held<1900){toast('Hold the SOS button for 2 seconds.');}};
+  b.addEventListener('pointerdown',e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId);}catch(_){}start();});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>{if(t0)stop(false);}));
+  b.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();start();}});
+  b.addEventListener('keyup',e=>{if((e.key===' '||e.key==='Enter')&&t0)stop(false);});
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+}
+async function sosFlow(){
+  try{navigator.vibrate&&navigator.vibrate([400,200,400]);}catch(e){}
+  logEv('sos','SOS held – countdown started');
+  let n=10;
+  const res=await modal({title:'Sending SOS…',html:'<p style="font-size:1.4rem;font-weight:700" id="sosN" aria-live="assertive">Alerting your family in 10 seconds</p><p class="muted">Press <strong>I’m OK</strong> to cancel.</p>',
+    actions:[{label:'I’m OK, cancel',kind:'ghost',value:'cancel'},{label:'Send now',kind:'danger',value:'send'}],
+    onOpen:(b,f)=>{const iv=setInterval(()=>{n--;const el=$('#sosN');if(el)el.textContent='Alerting your family in '+n+' second'+(n===1?'':'s');if(n<=0){clearInterval(iv);f('send');}},1000);modal.cleanup=()=>clearInterval(iv);}});
+  if(res!=='send'){logEv('sos','SOS cancelled');toast('SOS cancelled.');return;}
+  const msg='🆘 SOS from '+(profile.name||'TIGA wearer')+'\n'+statusText()+(profile.medical?'\nMedical: '+profile.medical:'')+(profile.allergies?'\nAllergies: '+profile.allergies:'')+(profile.conditions?'\nConditions: '+profile.conditions:'');
+  const ok=await tgSend(msg);logEv('sos',ok?'SOS sent via Telegram':'SOS NOT sent');
+  const tel=(n,l)=>n?'<p><a class="btn block" href="tel:'+esc(n.replace(/[^\d+]/g,''))+'">'+esc(l)+'</a></p>':'';
+  await modal({title:ok?'Your family has been alerted':'The alert could NOT be sent',html:(ok?'<p>Stay where you are if it is safe.</p>':'<p>Family alerts are not set up, or there is no internet. <strong>Please call someone now.</strong></p>')+tel(profile.ecPhone,'Call '+(profile.ecName||'emergency contact'))+tel(profile.doctorPhone,'Call '+(profile.doctorName||'doctor'))+'<p class="small muted">In an emergency, call your local emergency number.</p>',actions:[{label:'Close',kind:'primary',value:'ok'}]});
+}
+
+/* ============================================================
+   TODAY
+   ============================================================ */
+function connState(){
+  const fresh=S.live&&Date.now()-S.lastT<8000;
+  if(S.mode==='demo')return ['demo','Demo'];
+  if(S.mode==='ble'||S.mode==='usb')return fresh?['live','Live']:['wait','No data'];
+  return ['off','Not connected'];
+}
+function renderConn(){
+  const [s,t]=connState();const c=$('#connChip');if(c){c.dataset.s=s;$('#connText').textContent=t;}
+  const b=$('#banner');if(b){if(review){b.className='banner show';b.textContent='Viewing a saved log: '+review.name+'. Live data is paused in the readings.';}else if(S.mode==='demo'){b.className='banner show';b.textContent='DEMO DATA: these are made-up readings, not from a real watch.';}else b.className='banner';}
+  const sc=$('#sysConn');if(sc)sc.innerHTML=connHTML();
+}
+function refreshStatus(){
+  const out=TESTS.out||{};const card=$('#statusCard');if(!card)return;
+  let s='na',title='Waiting for the watch',why='Connect your TIGA in System, or try demo mode.',badge='·';
+  const fresh=S.live&&Date.now()-S.lastT<15000;
+  if(fresh){
+    const key=[1,2,4,13].map(i=>({i,r:out[i]})).filter(x=>x.r);const al=key.find(x=>x.r.s==='alert'),wa=key.find(x=>x.r.s==='watch');
+    if(S.live&&!S.live.worn){s='watch';title='Put the watch on';why='It cannot feel your skin, so there are no readings yet.';badge='⌚';}
+    else if(al){s='alert';title='Check in with someone';why=al.r.t;badge='!';}
+    else if(wa){s='watch';title='Take it easy';why=wa.r.t;badge='•';}
+    else{s='ok';title='You’re doing well';why='Your heart rate and oxygen look fine.';badge='✓';}
+  }
+  card.className='card status '+s;$('#stBadge').textContent=badge;$('#stTitle').textContent=title;$('#stWhy').textContent=why;
+}
+function onLive(){
+  const l=S.live;renderConn();if(!l)return;
+  const out=TESTS.out||{};
+  const set=(k,v)=>$$('[data-v="'+k+'"]').forEach(e=>e.textContent=v);
+  set('hr',has(l.hr)?l.hr:'—');set('spo2',has(l.spo2)?l.spo2:'—');
+  const d=daySummary(dayKey(Date.now()));set('steps',nfmt(d.steps));set('act',d.act);
+  set('hrsub',out[1]?ST[out[1].s]:'');set('spsub',out[2]?ST[out[2].s]:'');
+  set('stsub',d.steps?'Great, keep going':'');set('acsub','');
+  if(!l.worn){set('hrsub','Not worn');set('spsub','Not worn');}
+  if(!onLive.t||Date.now()-onLive.t>4000){onLive.t=Date.now();tick5();}
+}
+function renderToday(){
+  $('#todayDate').textContent=new Date().toLocaleDateString([], {weekday:'long',day:'numeric',month:'long'});
+  const sc=$('#setupCard');
+  sc.innerHTML=profile.name?'':'<div class="card"><h2>Welcome</h2><p>Let’s set up your profile so your family and doctor have the right details.</p><div class="row" style="margin-top:.6rem"><button class="btn" id="btnSetup">Set up my profile</button></div></div>';
+  const b=$('#btnSetup');if(b)b.onclick=editProfile;
+  const g=firstName();const h=new Date().getHours();$('#h-today').textContent=(g?'Hello, '+g:'How am I doing?');
+  $('#tgState').textContent=tgReady()?'Your family can ask for an update any time from Telegram. The app needs to be open on this phone to answer.':'Family updates are not set up yet. You can do it in System → Family & alerts.';
+  renderNotes();renderLastReq();
+}
+let mood=null;
+function renderNotes(){
+  const ns=store.get('notes',[]).filter(n=>dayKey(n.t)===dayKey(Date.now())).slice(0,5);
+  $('#noteList').innerHTML=ns.map(n=>'<div class="note"><span class="muted small">'+fmtT(n.t)+'</span> '+({good:'😀',ok:'😐',low:'😟'}[n.mood]||'')+' '+esc(n.text)+(n.hr?' <span class="muted small">· HR '+n.hr+'</span>':'')+'</div>').join('')||'<p class="small muted">No notes yet today.</p>';
+}
+function addNote(){
+  const text=$('#noteText').value.trim();if(!text&&!mood){toast('Pick a face or write a note first.');return;}
+  const ns=store.get('notes',[]);ns.unshift({t:Date.now(),mood,text,hr:S.live&&S.live.hr,spo2:S.live&&S.live.spo2});if(ns.length>300)ns.length=300;store.set('notes',ns);
+  $('#noteText').value='';mood=null;$$('.mood button').forEach(b=>b.setAttribute('aria-pressed','false'));renderNotes();toast('Note saved.');logEv('note',text||'(mood only)');
+}
+
+/* ============================================================
+   READINGS (charts)
+   ============================================================ */
+let range='1h';
+function lineSVG(rows,k,{min,max,gap,fmt=v=>Math.round(v)}){
+  const pts=rows.filter(r=>has(r[k])&&(k!=='hr'&&k!=='spo2'||r[k]>0)).map(r=>({t:r.t,v:r[k]}));
+  if(pts.length<2)return '<p class="small muted">Not enough data yet.</p>';
+  const W=320,Hh=110,L=30,B=16,T=6,R=6;let lo=Math.min(...pts.map(p=>p.v)),hi=Math.max(...pts.map(p=>p.v));
+  if(min!=null)lo=Math.min(lo,min);if(max!=null)hi=Math.max(hi,max);if(hi-lo<2){hi+=1;lo-=1;}const pdg=(hi-lo)*.08;lo-=pdg;hi+=pdg;
+  const t0=pts[0].t,t1=pts[pts.length-1].t,x=t=>L+(W-L-R)*(t1===t0?0:(t-t0)/(t1-t0)),y=v=>T+(Hh-T-B)*(1-(v-lo)/(hi-lo));
+  let d='',prev=null;pts.forEach(p=>{d+=(prev&&p.t-prev.t<=gap?'L':'M')+x(p.t).toFixed(1)+' '+y(p.v).toFixed(1)+' ';prev=p;});
+  return '<svg class="chart" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="'+esc(k)+' chart from '+fmtT(t0)+' to '+fmtT(t1)+', range '+fmt(Math.min(...pts.map(p=>p.v)))+' to '+fmt(Math.max(...pts.map(p=>p.v)))+'"><line class="ax" x1="'+L+'" y1="'+(Hh-B)+'" x2="'+(W-R)+'" y2="'+(Hh-B)+'"/><line class="ax" x1="'+L+'" y1="'+T+'" x2="'+L+'" y2="'+(Hh-B)+'"/>'+
+   '<text x="2" y="'+(T+8)+'">'+fmt(hi-pdg)+'</text><text x="2" y="'+(Hh-B)+'">'+fmt(lo+pdg)+'</text><text x="'+L+'" y="'+(Hh-3)+'">'+fmtT(t0)+'</text><text x="'+(W-R)+'" y="'+(Hh-3)+'" text-anchor="end">'+fmtT(t1)+'</text><path class="ln" d="'+d+'"/></svg>';
+}
+function barSVG(rows,binMs){
+  if(!rows.length)return '<p class="small muted">Not enough data yet.</p>';
+  const t0=Math.floor(rows[0].t/binMs)*binMs,t1=rows[rows.length-1].t;const n=Math.max(1,Math.ceil((t1-t0)/binMs)+1);const bins=new Array(n).fill(0);
+  rows.forEach(r=>{bins[Math.min(n-1,Math.floor((r.t-t0)/binMs))]+=r.sd||0;});const mx=Math.max(...bins,1);
+  const W=320,Hh=110,L=30,B=16,T=6,bw=(W-L-6)/n;
+  return '<svg class="chart" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Steps per '+Math.round(binMs/60000)+' minutes, most '+mx+'"><line class="ax" x1="'+L+'" y1="'+(Hh-B)+'" x2="'+(W-6)+'" y2="'+(Hh-B)+'"/>'+bins.map((v,i)=>'<rect class="bar" x="'+(L+i*bw+1).toFixed(1)+'" y="'+(T+(Hh-T-B)*(1-v/mx)).toFixed(1)+'" width="'+Math.max(1,bw-2).toFixed(1)+'" height="'+((Hh-T-B)*v/mx).toFixed(1)+'"/>').join('')+
+   '<text x="2" y="'+(T+8)+'">'+mx+'</text><text x="2" y="'+(Hh-B)+'">0</text><text x="'+L+'" y="'+(Hh-3)+'">'+fmtT(t0)+'</text><text x="'+(W-6)+'" y="'+(Hh-3)+'" text-anchor="end">'+fmtT(t1)+'</text></svg>';
+}
+function chartCard(id,title,sub,info,svg,extra=''){return '<div class="card" id="cc-'+id+'"><div class="row between"><h2>'+esc(title)+'</h2>'+infoBtn('ci-'+id,'About '+title)+'</div><p class="muted small">'+sub+'</p>'+svg+extra+'<p class="explain" id="ci-'+id+'" hidden>'+esc(info)+'</p></div>';}
+function renderCharts(){
+  const host=$('#charts');if(!host)return;
+  const rows=review?review.rows:(range==='1h'?A.tail(H,3600):todayRows());
+  const gap=review?120000:(range==='1h'?150000:900000);
+  const hs=A.stats(rows,'hr'),ss=A.stats(rows,'spo2');
+  const sumSteps=rows.reduce((a,r)=>a+(r.sd||0),0);const binMs=review?Math.max(300000,Math.ceil((rows.length?rows[rows.length-1].t-rows[0].t:3600000)/30/60000)*60000):(range==='1h'?120000:1800000);
+  const last=rows[rows.length-1];
+  host.innerHTML=
+   chartCard('hr','Heart rate',hs?'Average '+Math.round(hs.avg)+' · lowest '+hs.min+' · highest '+hs.max+' bpm':'No heart rate readings in this period.','Each point is your heart rate (beats per minute). Gaps mean the watch was not on your skin. It rises when you walk and settles when you rest.',lineSVG(rows,'hr',{gap,min:50,max:110}))+
+   chartCard('sp','Oxygen (SpO2)',ss?'Average '+Math.round(ss.avg)+'% · lowest '+ss.min+'%':'No oxygen readings in this period.','Your blood oxygen. 95% and above is typical. Short dips are often just a loose fit or cold fingers.',lineSVG(rows,'spo2',{gap,min:90,max:100}))+
+   chartCard('st','Steps','Total '+nfmt(sumSteps)+' steps in this period.','Bars show how many steps you took in each stretch of time. Tall bars mean you were walking.',barSVG(rows,binMs))+
+   chartCard('al','Height','Stairs and slopes show up as rises and falls.','Height is measured by the air pressure sensor, relative to where you started. A rise of about 3 m is one floor of stairs.',lineSVG(rows,'alt',{gap,fmt:v=>(Math.round(v*10)/10)}))+
+   chartCard('pr','Air pressure','Slow changes follow the weather.','Air pressure in hectopascals. Normal is around 1013. A steady fall can mean the weather is turning.',lineSVG(rows,'p',{gap,fmt:v=>(Math.round(v*10)/10)}))+
+   chartCard('tp','Taps on the watch','Tap the sensor and watch the count rise.','The watch can feel taps. This is for quick checks without using a screen.','<div class="bigtap" id="tapBig" aria-live="polite">'+(last&&has(last.taps)?last.taps:'—')+'</div>');
+  const rb=$('#reviewBar');rb.innerHTML=review?'<div class="card"><div class="row between"><div><strong>Saved log</strong><div class="small muted">'+esc(review.name)+' · '+fmtDT(review.rows[0].t)+' → '+fmtT(review.rows[review.rows.length-1].t)+' · '+review.rows.length+' rows</div></div><button class="btn sm" id="btnLive">Back to live</button></div></div>':'';
+  const bl=$('#btnLive');if(bl)bl.onclick=exitReview;
+  $('#rangeSeg').style.display=review?'none':'';
+}
+let lastTaps=null;
+function tapPulse(){const el=$('#tapBig');if(!el||!S.live||!has(S.live.taps))return;if(lastTaps!=null&&S.live.taps>lastTaps){el.textContent=S.live.taps;el.classList.remove('pulse');void el.offsetWidth;el.classList.add('pulse');}else el.textContent=S.live.taps;lastTaps=S.live.taps;}
+
+/* ============================================================
+   SESSION
+   ============================================================ */
+let sess=store.get('sess',null),sessIv=null;
+function renderSession(){
+  const run=sess&&!sess.end;$('#sessChip').textContent=run?'Running':sess?'Finished':'Not started';$('#sessChip').className='chip '+(run?'ok':'');
+  $('#btnSess').textContent=run?'Finish session':'Start session';
+  if(!run&&sess&&sess.sum){const s=sess.sum;$('#sessSummary').innerHTML='Last session: '+fmtDur(s.dur)+' · '+nfmt(s.steps)+' steps'+(s.hrAvg?' · average HR '+Math.round(s.hrAvg)+' (peak '+s.hrMax+')':'')+(s.fl?' · '+s.fl+' floors':'');}
+  else $('#sessSummary').textContent=run?'Your readings are being recorded for this session.':'Start a session when you go for a walk or do an activity.';
+  tickSess();
+}
+function tickSess(){const run=sess&&!sess.end;const d=run?(Date.now()-sess.start)/1000:sess&&sess.sum?sess.sum.dur:0;$('#sessTimer').textContent=pad(Math.floor(d/60))+':'+pad(Math.floor(d%60));}
+async function toggleSession(){
+  const run=sess&&!sess.end;
+  if(!run){sess={start:Date.now(),steps0:todaySteps(),fl0:S.live?S.live.fl||0:0};store.set('sess',sess);logEv('session','Session started');if(S.live)persistNoteSession();clearInterval(sessIv);sessIv=setInterval(tickSess,1000);}
+  else{const rows=H.filter(r=>r.t>=sess.start);const hs=A.stats(rows,'hr');sess.end=Date.now();sess.sum={dur:(sess.end-sess.start)/1000,steps:rows.reduce((a,r)=>a+(r.sd||0),0),hrAvg:hs?hs.avg:null,hrMax:hs?hs.max:null,fl:Math.max(0,(S.live?S.live.fl||0:0)-sess.fl0)};store.set('sess',sess);clearInterval(sessIv);logEv('session','Session finished: '+fmtDur(sess.sum.dur)+', '+sess.sum.steps+' steps');}
+  renderSession();
+}
+function persistNoteSession(){}
+
+/* ============================================================
+   PROFILE
+   ============================================================ */
+function resizePhoto(file){return new Promise((res,rej)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{const s=256,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d');const m=Math.min(img.width,img.height);x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82));};img.onerror=()=>rej(new Error('Could not read that image'));img.src=u;});}
+async function editProfile(){
+  const f=document.createElement('form');f.noValidate=true;f.addEventListener('submit',e=>e.preventDefault());
+  const fld=(id,label,val,type='text',ph='')=>'<label class="f" for="pf-'+id+'">'+label+'</label><input type="'+type+'" id="pf-'+id+'" value="'+esc(val)+'" placeholder="'+esc(ph)+'" autocomplete="off">';
+  const ta=(id,label,val,ph)=>'<label class="f" for="pf-'+id+'">'+label+'</label><textarea id="pf-'+id+'" placeholder="'+esc(ph)+'">'+esc(val)+'</textarea>';
+  f.innerHTML='<div class="row"><span class="avatar" id="pf-av" style="width:4rem;height:4rem">'+(profile.photo?'<img alt="" src="'+profile.photo+'">':esc((profile.name||'T')[0].toUpperCase()))+'</span><div><label class="btn sm ghost" for="pf-photo" style="cursor:pointer">Choose photo</label><input type="file" id="pf-photo" accept="image/*" class="sr"></div></div>'+
+   fld('name','Name',profile.name)+fld('dob','Date of birth',profile.dob,'date')+
+   fld('doctorName','Doctor',profile.doctorName)+fld('doctorPhone','Doctor’s phone',profile.doctorPhone,'tel')+
+   fld('ecName','Emergency contact',profile.ecName)+fld('ecRelation','Relationship',profile.ecRelation,'text','e.g. daughter')+fld('ecPhone','Emergency contact phone',profile.ecPhone,'tel')+
+   fld('bitchat','Bitchat name (optional)',profile.bitchat,'text','their Bitchat nickname')+
+   ta('allergies','Allergies',profile.allergies,'e.g. penicillin, peanuts')+ta('conditions','Health conditions',profile.conditions,'e.g. high blood pressure, type 2 diabetes')+ta('medical','Other medical notes',profile.medical,'e.g. takes blood thinners, pacemaker');
+  let photo=profile.photo;
+  const r=await modal({title:'My profile',node:f,actions:[{label:'Cancel',kind:'ghost',value:false},{label:'Save',kind:'primary',value:true}],onOpen:()=>{const inp=$('#pf-photo');inp.addEventListener('change',async()=>{if(!inp.files[0])return;try{photo=await resizePhoto(inp.files[0]);$('#pf-av').innerHTML='<img alt="" src="'+photo+'">';}catch(e){toast(e.message);}});}});
+  if(!r)return;
+  const g=id=>$('#pf-'+id).value.trim();
+  profile=Object.assign({},profile,{photo,name:g('name'),dob:g('dob'),doctorName:g('doctorName'),doctorPhone:g('doctorPhone'),ecName:g('ecName'),ecRelation:g('ecRelation'),ecPhone:g('ecPhone'),bitchat:g('bitchat'),allergies:g('allergies'),conditions:g('conditions'),medical:g('medical')});
+  if(!store.set('profile',profile))toast('Saved for now, but this phone is low on storage.');
+  logEv('profile','Profile updated');renderWho();renderToday();renderSystem();toast('Profile saved.');
+}
+function profileHTML(){
+  const a=ageOf(profile.dob);const row=(l,v)=>v?'<dt>'+l+'</dt><dd>'+esc(v)+'</dd>':'';
+  const tel=(n,l)=>n?'<dt>'+l+'</dt><dd><a href="tel:'+esc(n.replace(/[^\d+]/g,''))+'">'+esc(n)+'</a></dd>':'';
+  return '<div class="row"><span class="avatar" style="width:3.6rem;height:3.6rem">'+(profile.photo?'<img alt="" src="'+profile.photo+'">':esc((profile.name||'T')[0].toUpperCase()))+'</span><div><h3>'+esc(profile.name||'No name yet')+'</h3><div class="small muted">'+(a!=null?a+' years old':'Date of birth not set')+'</div></div></div>'+
+   '<dl class="kv">'+row('Doctor',profile.doctorName)+tel(profile.doctorPhone,'Doctor phone')+row('Emergency',[profile.ecName,profile.ecRelation&&'('+profile.ecRelation+')'].filter(Boolean).join(' '))+tel(profile.ecPhone,'Phone')+row('Bitchat',profile.bitchat)+row('Allergies',profile.allergies)+row('Conditions',profile.conditions)+row('Notes',profile.medical)+'</dl>'+
+   '<div class="row" style="margin-top:.7rem"><button class="btn" data-act="profile">Edit profile</button></div>';
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+let repPeriod='week';
+function buildReport(p){
+  const n=p==='day'?1:p==='week'?7:30,today=dayKey(Date.now());const days=[];
+  for(let i=n-1;i>=0;i--){const d=dayKey(Date.now()-i*86400000);if(dayBuckets(d).length||d===today)days.push(daySummary(d));}
+  const f=(v,dp=0)=>v==null?'':Number(v).toFixed(dp);
+  const title='TIGA '+(p==='day'?'daily':p==='week'?'weekly':'monthly')+' report'+(profile.name?' – '+profile.name:'')+' ('+today+')';
+  const csv='date,steps,active_min,hr_avg,hr_min,hr_max,spo2_avg,floors_up,falls,worn_pct,battery\n'+days.map(d=>[d.date,d.steps,d.act,f(d.hrAvg),f(d.hrMin),f(d.hrMax),f(d.spo2),d.fl,d.falls,d.wornPct??'',d.bat??''].join(',')).join('\n')+'\n';
+  const notes=store.get('notes',[]).filter(x=>x.t>Date.now()-n*86400000);
+  const tr=store.get('tr',{}),out=TESTS.out||{};
+  const text=[title,'',profile.name?'Name: '+profile.name+(ageOf(profile.dob)!=null?' ('+ageOf(profile.dob)+')':''):'',profile.allergies?'Allergies: '+profile.allergies:'',profile.conditions?'Conditions: '+profile.conditions:'',profile.medical?'Notes: '+profile.medical:'','']
+   .concat(days.map(d=>d.date+': '+nfmt(d.steps)+' steps, '+d.act+' active min'+(d.hrAvg!=null?', HR avg '+Math.round(d.hrAvg)+' ('+d.hrMin+'–'+d.hrMax+')':'')+(d.spo2!=null?', SpO2 '+Math.round(d.spo2)+'%':'')+(d.falls?', falls '+d.falls:''))).concat(notes.length?['','Notes:'].concat(notes.slice(0,10).map(x=>fmtDT(x.t)+' '+({good:'😀',ok:'😐',low:'😟'}[x.mood]||'')+' '+(x.text||''))):[]).filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n');
+  const tbl=days.map(d=>'<tr><td>'+d.date+'</td><td>'+d.steps+'</td><td>'+d.act+'</td><td>'+f(d.hrAvg)+'</td><td>'+f(d.hrMin)+'–'+f(d.hrMax)+'</td><td>'+f(d.spo2)+'</td><td>'+d.fl+'</td><td>'+d.falls+'</td></tr>').join('');
+  const html='<h1>'+esc(title)+'</h1>'+(profile.name?'<p><strong>'+esc(profile.name)+'</strong>'+(ageOf(profile.dob)!=null?', '+ageOf(profile.dob)+' years':'')+'<br>Doctor: '+esc(profile.doctorName||'—')+' '+esc(profile.doctorPhone||'')+'<br>Emergency contact: '+esc(profile.ecName||'—')+' '+esc(profile.ecPhone||'')+'<br>Allergies: '+esc(profile.allergies||'none recorded')+'<br>Conditions: '+esc(profile.conditions||'none recorded')+'<br>Notes: '+esc(profile.medical||'—')+'</p>':'')+
+   '<h2>Daily summary</h2><table><tr><th>Date</th><th>Steps</th><th>Active min</th><th>HR avg</th><th>HR range</th><th>SpO2</th><th>Floors</th><th>Falls</th></tr>'+tbl+'</table>'+
+   (notes.length?'<h2>Notes</h2><ul>'+notes.slice(0,30).map(x=>'<li>'+fmtDT(x.t)+' '+({good:'😀',ok:'😐',low:'😟'}[x.mood]||'')+' '+esc(x.text||'')+'</li>').join('')+'</ul>':'')+
+   '<h2>Health checks (current)</h2><table><tr><th>#</th><th>Check</th><th>Value</th><th>Status</th><th>Tester note</th></tr>'+TESTS.map(t=>{const o=out[t.id]||{v:'',s:'na'};const r=tr[t.id]||{};return '<tr><td>'+t.id+'</td><td>'+esc(t.name)+'</td><td>'+esc(o.v)+'</td><td>'+ST[o.s]+(r.res?' / '+r.res:'')+'</td><td>'+esc(r.note||'')+'</td></tr>';}).join('')+'</table><p style="font-size:10px">TIGA is a wellness tracker, not a medical device. Generated '+fmtDT(Date.now())+'.</p>';
+  return {title,csv,text,html,days};
+}
+async function shareReport(){
+  const r=buildReport(repPeriod);const file=new File([r.csv],'tiga_'+repPeriod+'_report.csv',{type:'text/csv'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({title:r.title,text:r.text,files:[file]});
+    else if(navigator.share)await navigator.share({title:r.title,text:r.text});
+    else{try{await navigator.clipboard.writeText(r.text);toast('Sharing is not available here. The report text was copied.');}catch(e){toast('Sharing is not available in this browser. Use Download instead.');}}
+    logEv('report','Shared '+repPeriod+' report');
+  }catch(e){if(e.name!=='AbortError')toast('Could not share: '+e.message);}
+}
+function emailReport(){const r=buildReport(repPeriod);const body=r.text.slice(0,1600)+(r.text.length>1600?'\n…(shortened. Use Share or Download to send the full file)':'');location.href='mailto:?subject='+encodeURIComponent(r.title)+'&body='+encodeURIComponent(body);logEv('report','Opened email for '+repPeriod+' report');}
+function printReport(){const r=buildReport(repPeriod);$('#printArea').innerHTML=r.html;setTimeout(()=>{window.print();},50);}
+
+/* ============================================================
+   SYSTEM
+   ============================================================ */
+function connHTML(){
+  const [s,t]=connState();const st=S.dev.status;const fl=(b,n)=>'<span class="chip '+(st&b?'ok':'alert')+'">'+n+'</span> ';
+  return '<p><span class="chip '+(s==='live'?'ok':s==='demo'||s==='wait'?'watch':'')+'">'+esc(t)+'</span> '+(S.mode==='ble'?'Bluetooth':S.mode==='usb'?'USB':S.mode==='demo'?'Demo data':'')+(S.live&&S.dev.ver?' · protocol v'+S.dev.ver:'')+'</p>'+(S.mode==='ble'&&S.dev.ver>=8?'<p class="small">'+fl(1,'MPU')+fl(2,'MAX30102')+fl(4,'BMP280')+fl(8,'Piezo')+fl(16,'Flash log')+'</p>':'');
+}
+function renderLog(){const el=$('#logList');if(!el)return;el.innerHTML=LOG.slice(0,80).map(l=>'<div class="logl"><time>'+fmtDT(l.t).slice(5)+'</time><span><strong>'+esc(l.type)+'</strong> '+esc(l.msg)+'</span></div>').join('')||'<p class="small muted">Nothing logged yet.</p>';}
+function renderSystem(){
+  const host=$('#sysBody');if(!host)return;const th=(m,sz)=>settings.mode===m&&settings.size===sz||(!settings.mode&&m===(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')&&sz===settings.size);
+  const openIds=$$('#sysBody details[open]').map(d=>d.dataset.k);
+  host.innerHTML=
+  '<details class="acc" data-k="profile" open><summary>My profile</summary><div class="in">'+profileHTML()+'</div></details>'+
+  '<details class="acc" data-k="conn"><summary>Connection</summary><div class="in"><div id="sysConn">'+connHTML()+'</div><div class="row" style="margin-top:.6rem"><button class="btn" data-act="ble">Connect Bluetooth</button><button class="btn ghost" data-act="bleoff">Disconnect</button></div><div class="row" style="margin-top:.5rem"><button class="btn ghost" data-act="usb">Connect USB (computer)</button><button class="btn ghost" data-act="demo">'+(S.mode==='demo'?'Stop demo':'Try demo mode')+'</button>'+(S.mode==='demo'?'<button class="btn ghost sm" data-act="demofall">Simulate a fall</button>':'')+'</div><p class="small muted" style="margin-top:.6rem">iPhone: Bluetooth needs the free Bluefy browser. Android and computers: Chrome or Edge. The watch is named TIGA-1.</p></div></details>'+
+  '<details class="acc" data-k="look"><summary>Appearance</summary><div class="in"><div class="themes" role="group" aria-label="Choose a look">'+
+   [['light','normal','Light','#f6f4ef','#0f6e6e'],['dark','normal','Dark','#10151b','#55c7c4'],['light','large','Large light','#f6f4ef','#0f6e6e'],['dark','large','Large dark','#10151b','#55c7c4']].map(x=>'<button data-theme="'+x[0]+':'+x[1]+'" aria-pressed="'+th(x[0],x[1])+'"><span class="sw" style="background:linear-gradient(90deg,'+x[3]+' 60%,'+x[4]+' 60%)"></span><strong'+(x[1]==='large'?' style="font-size:1.15em"':'')+'>'+x[2]+'</strong><span class="small muted">'+(x[1]==='large'?'Bigger text and buttons':'Standard size')+'</span></button>').join('')+'</div></div></details>'+
+  '<details class="acc" data-k="family"><summary>Family & alerts</summary><div class="in"><p class="small muted">Alerts and updates are sent through a private Telegram bot. Your token stays on this phone only.</p>'+
+   '<label class="f" for="tgToken">Bot token</label><input type="password" id="tgToken" value="'+esc(settings.tgToken)+'" autocomplete="off" placeholder="123456:ABC…">'+
+   '<label class="f" for="tgChat">Chat ID</label><input type="text" id="tgChat" inputmode="numeric" value="'+esc(settings.tgChat)+'" placeholder="e.g. 123456789 (groups start with −)">'+
+   '<div class="seg" style="margin-top:.7rem" role="group" aria-label="Family options"><button data-tgopt="alerts" aria-pressed="'+settings.alerts+'">Send alerts</button><button data-tgopt="poll" aria-pressed="'+settings.tgPoll+'">Answer requests</button></div>'+
+   '<div class="row" style="margin-top:.7rem"><button class="btn" data-act="tgsave">Save</button><button class="btn ghost" data-act="tgtest">Send test message</button></div>'+
+   '<p class="small muted" style="margin-top:.6rem">Family can send <strong>/update</strong> or <strong>/hr</strong> to the bot. It only answers while this app is open on this phone. Alerts sent: fall, SOS, very high/low heart rate, low battery.</p></div></details>'+
+  '<details class="acc" data-k="reports"><summary>Reports</summary><div class="in"><div class="seg" role="group" aria-label="Report period">'+['day','week','month'].map(p=>'<button data-per="'+p+'" aria-pressed="'+(repPeriod===p)+'">'+({day:'Today',week:'This week',month:'This month'})[p]+'</button>').join('')+'</div>'+
+   '<div class="row" style="margin-top:.7rem"><button class="btn" data-act="repdl">Download</button><button class="btn ghost" data-act="repshare">Share</button><button class="btn ghost" data-act="repmail">Email</button><button class="btn ghost" data-act="repprint">Print / PDF</button></div><p class="small muted" style="margin-top:.5rem">Share sends the file through your phone’s apps (WhatsApp, Mail, Messages…). Email only fits a short summary. Print lets you save as PDF.</p></div></details>'+
+  '<details class="acc" data-k="data"><summary>Device data</summary><div class="in"><p class="small muted">Walks without a computer are saved on the watch. Plug the watch into a computer with Chrome and download them as a spreadsheet file (CSV).</p><div class="row"><button class="btn" data-act="usblog">Download watch log (USB)</button><label class="btn ghost" for="csvIn" style="cursor:pointer">Open a saved log</label><input type="file" id="csvIn" accept=".csv,text/csv" class="sr"></div></div></details>'+
+  '<details class="acc" data-k="testing"><summary>Testing (Christine’s view)</summary><div class="in" id="christineHost"></div></details>'+
+  '<details class="acc" data-k="log"><summary>Log</summary><div class="in"><div id="logList"></div><div class="row" style="margin-top:.6rem"><button class="btn ghost sm" data-act="logdl">Download log</button><button class="btn ghost sm" data-act="logclr">Clear log</button></div></div></details>'+
+  '<details class="acc" data-k="about"><summary>About & privacy</summary><div class="in"><p class="small">TIGA app v2.0 · data format tiga/1 · firmware protocol v8.</p><p class="small muted">Everything is stored on this phone. Nothing is sent anywhere except the Telegram messages you set up. TIGA is a wellness tracker, not a medical device.</p><div class="row" style="margin-top:.6rem"><button class="btn danger sm" data-act="wipe">Erase all app data</button></div></div></details>';
+  openIds.forEach(k=>{const d=$('#sysBody details[data-k="'+k+'"]');if(d)d.open=true;});
+  const t=$('#sysBody details[data-k="testing"]');const fill=()=>{const h=$('#christineHost');if(h&&!h.dataset.done){h.dataset.done='1';renderChristineTests(h);}};
+  t.addEventListener('toggle',()=>{if(t.open)fill();});if(t.open)fill();
+  renderLog();const ci=$('#csvIn');if(ci)ci.addEventListener('change',async()=>{const f=ci.files[0];if(f){loadCSV(await f.text(),f.name);ci.value='';go('read');}});
+}
+async function sysAction(a){
+  if(a==='profile')return editProfile();
+  if(a==='ble')return bleConnect();
+  if(a==='bleoff'){bleDisconnect();toast('Disconnected.');return;}
+  if(a==='usb'){await usbConnect();return;}
+  if(a==='demo'){if(S.mode==='demo'){stopDemo();H.length=0;}else startDemo();renderSystem();return;}
+  if(a==='demofall')return demoFall();
+  if(a==='tgsave'){settings.tgToken=$('#tgToken').value.trim();settings.tgChat=$('#tgChat').value.trim();settings.tgOffset=0;saveSettings();toast('Saved.');renderToday();return;}
+  if(a==='tgtest'){settings.tgToken=$('#tgToken').value.trim();settings.tgChat=$('#tgChat').value.trim();saveSettings();if(!tgReady()){toast('Enter the bot token and chat ID first.');return;}toast('Sending…');const ok=await tgSend('✅ TIGA test message for '+(profile.name||'the wearer')+'.\n'+statusText());toast(ok?'Sent. Check Telegram.':'Could not send. Check the token and chat ID, and that you pressed Start on the bot.',5000);return;}
+  if(a==='repdl'){const r=buildReport(repPeriod);saveFile('tiga_'+repPeriod+'_report_'+dayKey(Date.now())+'.csv',r.csv,'text/csv');toast('Report downloaded.');return;}
+  if(a==='repshare')return shareReport();
+  if(a==='repmail')return emailReport();
+  if(a==='repprint')return printReport();
+  if(a==='usblog')return usbDownloadLog();
+  if(a==='logdl'){saveFile('tiga_app_log_'+dayKey(Date.now())+'.txt',LOG.map(l=>fmtDT(l.t)+' ['+l.type+'] '+l.msg).join('\n'),'text/plain');return;}
+  if(a==='logclr'){if(await ask('Clear the log?','This removes the event list. Your readings are not affected.','Clear')){LOG.length=0;store.set('log',LOG);renderLog();}return;}
+  if(a==='wipe'){if(await ask('Erase everything?','This deletes your profile, notes, history and settings from this phone. It cannot be undone.','Erase all',  'Cancel',true)){try{localStorage.clear();}catch(e){}Object.keys(mem).forEach(k=>delete mem[k]);location.reload();}return;}
+}
+
+/* ============================================================
+   NAVIGATION + INIT
+   ============================================================ */
+function go(name){
+  $$('.screen').forEach(s=>s.classList.toggle('active',s.id==='s-'+name));
+  $$('.tabs button').forEach(b=>{if(b.dataset.go===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  window.scrollTo(0,0);try{$('#h-'+({today:'today',read:'read',session:'sess',system:'sys'})[name]).focus({preventScroll:true});}catch(e){}
+  if(name==='read'){renderCharts();}
+  if(name==='session'||name==='system')refreshTests();
+}
+const curScreen=()=>($('.screen.active')||{}).id;
+function tick5(){const s=curScreen();if(s==='s-read'){renderCharts();}if(s==='s-session'||s==='s-system'||s==='s-today')refreshTests();refreshStatus();if(s==='s-today')onLiveTiles();}
+function onLiveTiles(){const out=TESTS.out||{};const set=(k,v)=>$$('[data-v="'+k+'"]').forEach(e=>e.textContent=v);set('hrsub',out[1]&&S.live&&S.live.worn?ST[out[1].s]:S.live?'Not worn':'');set('spsub',out[2]&&S.live&&S.live.worn?ST[out[2].s]:S.live?'Not worn':'');}
+function onReviewChange(){renderConn();renderCharts();refreshTests();refreshStatus();}
+
+function init(){
+  applyTheme();renderWho();renderToday();renderAgnesTests();renderSystem();renderSession();renderConn();renderCharts();refreshTests();refreshStatus();initSOS();
+  if(sess&&!sess.end){sessIv=setInterval(tickSess,1000);}
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('button,label');if(!t)return;
+    if(t.dataset.go){go(t.dataset.go);return;}
+    if(t.dataset.info){const p=document.getElementById(t.dataset.info);if(p){const o=p.hidden;p.hidden=!o;t.setAttribute('aria-expanded',String(o));}return;}
+    if(t.dataset.act){sysAction(t.dataset.act);return;}
+    if(t.dataset.start){runGuided(+t.dataset.start);return;}
+    if(t.dataset.theme){const [m,s]=t.dataset.theme.split(':');setTheme(m,s);return;}
+    if(t.dataset.per){repPeriod=t.dataset.per;$$('[data-per]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.per===repPeriod)));return;}
+    if(t.dataset.tgopt){const k=t.dataset.tgopt==='alerts'?'alerts':'tgPoll';settings[k]=!settings[k];saveSettings();t.setAttribute('aria-pressed',String(settings[k]));return;}
+    if(t.dataset.pf){const [id,res]=t.dataset.pf.split(':');const tr=store.get('tr',{});tr[id]=Object.assign(tr[id]||{},{res:tr[id]&&tr[id].res===res?undefined:res,t:Date.now()});store.set('tr',tr);$$('[data-pf^="'+id+':"]').forEach(b=>b.setAttribute('aria-pressed',String(tr[id].res===b.dataset.pf.split(':')[1])));refreshTests();return;}
+    if(t.dataset.r){range=t.dataset.r;$$('#rangeSeg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.r===range)));renderCharts();return;}
+    if(t.dataset.mood){mood=mood===t.dataset.mood?null:t.dataset.mood;$$('.mood button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mood===mood)));return;}
+  });
+  document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.tn){const tr=store.get('tr',{});tr[t.dataset.tn]=Object.assign(tr[t.dataset.tn]||{},{note:t.value,t:Date.now()});store.set('tr',tr);}});
+  $('#whoBtn').onclick=()=>{go('system');const d=$('#sysBody details[data-k="profile"]');if(d)d.open=true;};
+  $('#connChip').onclick=()=>{go('system');const d=$('#sysBody details[data-k="conn"]');if(d)d.open=true;};
+  $('#btnAddNote').onclick=addNote;$('#btnSess').onclick=toggleSession;
+  $('#btnSendUpdate').onclick=async()=>{if(!tgReady()){toast('Set up family updates in System first.');go('system');return;}toast('Sending…');const ok=await tgSend(statusText());toast(ok?'Update sent to your family.':'Could not send. Check your internet and Telegram settings.');};
+  setInterval(()=>{renderConn();tapPulse();},1000);setInterval(tick5,5000);setInterval(tgPoll,12000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)flushNow();else tgPoll();});window.addEventListener('pagehide',flushNow);
+  if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
+  matchMedia('(prefers-color-scheme: dark)').addEventListener&&matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(!settings.mode)applyTheme();});
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+</body>
+</html>
